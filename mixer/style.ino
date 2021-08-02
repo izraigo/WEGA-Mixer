@@ -61,7 +61,7 @@ function loadStatus() {
             for (let i = 1; i <= 8; i++) {
                 let plannedVol = r.planned[i - 1];
                 document.getElementsByName('p' + i)[0].value = plannedVol.toFixed(2);
-                let vol = r.pumped[i - 1];
+                let vol = r.result[i - 1];
                 let e = document.getElementById('r' + i);
                 e.textContent = vol ? '=' + vol.toFixed(2) + ' ' + (vol / plannedVol * 100 - 100).toFixed(2) + '%' : '';
                 e.style.fontWeight = r.pumpWorking == i ? 'bold' : 'normal'; 

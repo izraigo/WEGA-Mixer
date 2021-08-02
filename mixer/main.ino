@@ -75,18 +75,18 @@ class Kalman { // https://github.com/denyssene/SimpleKalmanFilter
 Kalman displayFilter = Kalman(1400, 80, 0.15); // плавный
 Kalman filter = Kalman(1000, 80, 0.4);         // резкий
 
-String names[] = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
-byte pinForward[] = {pump1, pump2, pump3, pump4, pump5, pump6, pump7, pump8};
-byte pinReverse[] = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
-int staticPreload[] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
-
 #define PUMPS_NO 8
+const String names[PUMPS_NO]      = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
+const byte pinForward[PUMPS_NO]   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
+const byte pinReverse[PUMPS_NO]   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
+const int staticPreload[PUMPS_NO] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
+
 float goal[PUMPS_NO];
 float curvol[PUMPS_NO];
 float fscl;
 float RawStartA,RawEndA,RawStartB,RawEndB;
 String wstatus;
-int nPomp;
+int nPump;
 unsigned long sTime, eTime;
 
 void setup() {
@@ -95,12 +95,12 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) {delay(500);}
   MDNS.begin("mixer");
   MDNS.addService("http", "tcp", 80);
-  server.on("/api/meta", meta);
-  server.on("/api/status", status);
-  server.on("/api/scales", scales);
-  server.on("/api/start", start);
-  server.on("/api/tare", tare);
-  server.on("/api/test", test);
+  server.on("/api/meta", metaApi);
+  server.on("/api/status", statusApi);
+  server.on("/api/scales", scalesApi);
+  server.on("/api/start", startApi);
+  server.on("/api/tare", tareApi);
+  server.on("/api/test", testApi);
   server.on("/", mainPage);
   server.on("/scales", scalesPage);
   server.on("/calibration", calibrationPage);
@@ -148,19 +148,27 @@ void loop() {
   lcd.print(F("Ready  ")); 
 }
 
-void meta() {
+String toString(float x, byte precision) {
+  if (x < 0 && -x < pow(0.1, precision)) {
+    x = 0;
+  }
+  return String(x, precision);
+}
+
+
+void metaApi() {
   String message;
   message.reserve(255);
   message += '{';
-  append(message, F("version"),     FW_version,                true,  false);
+  append(message, F("version"),     String(FW_version),        true,  false);
   append(message, F("scalePointA"), scale_calibration_A,       false, false);
   append(message, F("scalePointB"), scale_calibration_B,       false, false);  
-  append(message, F("names"),    names,                        true,  true);  
+  append(message, F("names"),       names,                     true,  true);  
   message += '}'; 
   server.send(200, "text/json", message);
 }
 
-void scales() {
+void scalesApi() {
   String message;
   message.reserve(255);
   message += '{';
@@ -172,28 +180,28 @@ void scales() {
   server.send(200, "text/json", message);
 } 
 
-void status() {
+void statusApi() {
   unsigned long ms = sTime == 0 ? 0 : (eTime == 0 ? sTime - millis() : sTime - eTime);  
   String message;
   message.reserve(512);
   message += '{';
   append(message, F("state"), wstatus,                                     true,  false);
-  append(message, F("timer"), (long) (ms / 1000),                          false, false);
+  append(message, F("timer"), ms / 1000,                                   false, false);
   append(message, F("sumA"),  (RawEndA - RawStartA) / scale_calibration_A, false, false);
   append(message, F("sumB"),  (RawEndB - RawStartB) / scale_calibration_B, false, false);
-  append(message, F("pumpWorking"), nPomp,                                 false, false); 
+  append(message, F("pumpWorking"), nPump,                                 false, false); 
   append(message, F("goal"),   goal,                                       false, false);
-  append(message, F("pumped"), curvol,                                     false, true);
+  append(message, F("result"), curvol,                                     false, true);
   message += '}';
   server.send(200, "text/json", message);  
 }
 
-void tare (){
+void tareApi(){
   tareScalesWithCheck(255);
   okPage();
 }
 
-void test (){
+void testApi(){
     okPage();
     for (int i = 0; i < PUMPS_NO; i++) {
       lcd.home();lcd.print(F("Start ") + names[i]);
@@ -205,15 +213,19 @@ void test (){
     }
 }
 
-void start() {
+void startApi() {
+  RawStartA = RawEndA = RawStartB = RawEndB = 0;
   sTime = millis();
+  eTime = 0;
  
   for (byte i = 0; i < PUMPS_NO; i ++) {
     goal[i]=server.arg("p" + (i + 1)).toFloat();
+    curvol[i] = 0;
   }
   
   okPage();
 
+  wstatus=F("Working");
   float offsetBeforePump = scale.get_offset();
   scale.set_scale(scale_calibration_A); //A side
   RawStartA=readScalesWithCheck(255);
@@ -232,19 +244,26 @@ void start() {
   RawEndB=readScalesWithCheck(255); 
   
   scale.set_offset(offsetBeforePump);
-  wstatus=F("Ready");
   eTime= millis();
-  
+  wstatus=F("Ready");
+
+  reportToWega();
+
+  delay (1000);
+  lcd.clear();
+}
+
+void reportToWega() {
   String httpstr;
   httpstr.reserve(200);
   httpstr += WegaApiUrl;
   httpstr += '?';
   for(byte i = 0; i < PUMPS_NO; i++) {
-    httpstr += "&p";
+    httpstr += F("&p");
     httpstr += (i + 1);
     httpstr += '=';
     httpstr += String(curvol[i],3);
-    httpstr += "&v";
+    httpstr += F("&v");
     httpstr += (i + 1);
     httpstr += '=';
     httpstr += String(goal[i],3);
@@ -254,16 +273,6 @@ void start() {
   http.begin(client, httpstr);
   http.GET();
   http.end();
-  
-  delay (1000);
-  lcd.clear();
-}
-
-String toString(float x, byte precision) {
-  if (x < 0 && -x < pow(0.1, precision)) {
-    x = 0;
-  }
-  return String(x, precision);
 }
 
 // Функции помп
@@ -287,7 +296,7 @@ void printValueAndPercent(float value, float targetValue) {
     lcd.setCursor(0, 1); 
     lcd.print(toString(value, 2)); 
     if (!isnan(targetValue)) {
-      lcd.print(" ("); lcd.print(toString(value/targetValue*100,1)); lcd.print("%)");
+      lcd.print(" ("); lcd.print(String(value/targetValue*100,1)); lcd.print("%)");
     }
     lcd.print(F("    "));
     yield();
@@ -328,8 +337,7 @@ void pumpToValue(float capValue, float capMillis, float targetValue, int n, floa
 
 // Функция налива
 float pumping(int n) {
-  wstatus=F("Working");
-  nPomp=n;
+  nPump=n;
   float wt = goal[n];
   server.handleClient();
 
@@ -435,7 +443,7 @@ float pumping(int n) {
   }
 
   lcd.setCursor(0, 1);
-  lcd.print(toString(value, 2));
+  lcd.print(String(value, 2));
   lcd.print(F(" ("));
   lcd.print(value/wt*100, 2);
   lcd.print(F("%)      "));
@@ -490,7 +498,7 @@ float rawToUnits(float raw, float calibrationPoint) {
 
 // функции для генерации json
 template<typename T>
-void append(String& src, const String& name, T value, bool quote, boolean last) {
+void append(String& src, const String& name, const T& value, bool quote, boolean last) {
   src += '"'; src += name; src += "\":";
   if (quote) src += '"';
   src += value;
@@ -498,7 +506,7 @@ void append(String& src, const String& name, T value, bool quote, boolean last) 
   if (last) src += ',';  
   src += '\n';
 }
-  
+
 template<typename T>
 void append(String& src, const String& name, T value[PUMPS_NO], bool quote, bool last) {
   src += '"'; src += name; src += "\":";
