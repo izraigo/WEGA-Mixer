@@ -76,10 +76,10 @@ Kalman displayFilter = Kalman(1400, 80, 0.15); // плавный
 Kalman filter = Kalman(1000, 80, 0.4);         // резкий
 
 #define PUMPS_NO 8
-const String names[PUMPS_NO]      = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
-const byte pinForward[PUMPS_NO]   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
-const byte pinReverse[PUMPS_NO]   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
-const int staticPreload[PUMPS_NO] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
+const String names[PUMPS_NO] PROGMEM      = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
+const byte pinForward[PUMPS_NO] PROGMEM   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
+const byte pinReverse[PUMPS_NO] PROGMEM   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
+const int staticPreload[PUMPS_NO] PROGMEM = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
 
 float goal[PUMPS_NO];
 float curvol[PUMPS_NO];
@@ -154,7 +154,6 @@ String toString(float x, byte precision) {
   }
   return String(x, precision);
 }
-
 
 void metaApi() {
   String message;
