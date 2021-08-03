@@ -81,11 +81,11 @@ const byte pinForward[PUMPS_NO] PROGMEM   = {pump1,  pump2,  pump3,  pump4,  pum
 const byte pinReverse[PUMPS_NO] PROGMEM   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
 const int staticPreload[PUMPS_NO] PROGMEM = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
 
+String wstatus;
 float goal[PUMPS_NO];
 float curvol[PUMPS_NO];
 float fscl;
-float RawStartA,RawEndA,RawStartB,RawEndB;
-String wstatus;
+float sumA,sumB;
 int nPump;
 unsigned long sTime, eTime;
 
@@ -184,13 +184,13 @@ void statusApi() {
   String message;
   message.reserve(512);
   message += '{';
-  append(message, F("state"), wstatus,                                     true,  false);
-  append(message, F("timer"), ms / 1000,                                   false, false);
-  append(message, F("sumA"),  (RawEndA - RawStartA) / scale_calibration_A, false, false);
-  append(message, F("sumB"),  (RawEndB - RawStartB) / scale_calibration_B, false, false);
-  append(message, F("pumpWorking"), nPump,                                 false, false); 
-  append(message, F("goal"),   goal,                                       false, false);
-  append(message, F("result"), curvol,                                     false, true);
+  append(message, F("state"), wstatus,         true,  false);
+  append(message, F("timer"), ms / 1000,       false, false);
+  append(message, F("sumA"),  sumA,            false, false);
+  append(message, F("sumB"),  sumB,            false, false);
+  append(message, F("pumpWorking"), nPump,     false, false); 
+  append(message, F("goal"),   goal,           false, false);
+  append(message, F("result"), curvol,         false, true);
   message += '}';
   server.send(200, "text/json", message);  
 }
@@ -203,22 +203,23 @@ void tareApi(){
 void testApi(){
     okPage();
     for (int i = 0; i < PUMPS_NO; i++) {
-      lcd.home();lcd.print(F("Start ") + names[i]);
-      PumpStart(0);delay(3000);
+      lcd.home();lcd.print(F("Start "));lcd.print(names[i]);
+      PumpStart(i);delay(3000);
       lcd.home();lcd.print(F("Revers       "));
-      PumpReverse(0);delay(3000);
+      PumpReverse(i);delay(3000);
       lcd.home();lcd.print(F("Stop       "));
-      PumpStop(0);delay(1000);
+      PumpStop(i);delay(1000);
     }
 }
 
 void startApi() {
-  RawStartA = RawEndA = RawStartB = RawEndB = 0;
   sTime = millis();
   eTime = 0;
+  sumA = 0;
+  sumB = 0;
  
   for (byte i = 0; i < PUMPS_NO; i ++) {
-    goal[i]=server.arg("p" + (i + 1)).toFloat();
+    goal[i] = server.arg("p" + (i + 1)).toFloat();
     curvol[i] = 0;
   }
   
@@ -227,28 +228,29 @@ void startApi() {
   wstatus=F("Working");
   float offsetBeforePump = scale.get_offset();
   scale.set_scale(scale_calibration_A); //A side
-  RawStartA=readScalesWithCheck(255);
+  float rawStart = readScalesWithCheck(255);
   pumping(0);
   pumping(1);
   pumping(2);
-  RawEndA=readScalesWithCheck(255);   
+  float rawMid = readScalesWithCheck(255);   
+  sumA = (rawMid - rawStart) / scale_calibration_A;
   
   scale.set_scale(scale_calibration_B); //B side 
-  RawStartB=RawEndA; 
   pumping(3);
   pumping(4);
   pumping(5);
   pumping(6);
   pumping(7); 
-  RawEndB=readScalesWithCheck(255); 
-  
+  float rawEnd = readScalesWithCheck(255); 
+  sumB = (rawEnd - rawMid) / scale_calibration_B;
+
   scale.set_offset(offsetBeforePump);
-  eTime= millis();
-  wstatus=F("Ready");
+  eTime = millis();
+  wstatus = F("Ready");
 
   reportToWega();
 
-  delay (1000);
+  delay(1000);
   lcd.clear();
 }
 
