@@ -86,9 +86,7 @@ loadStatus();
 const char SCALES_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <link rel='stylesheet' type='text/css' href='style.css'/>
-Status: <span id="state"></span><br>
 <br>Value = <span id="value"></span>g
-<br>Raw = <span id="rawValue"></span>
 <p>
     <input type='button' onclick="fetch('/api/tare');" value='Set to ZERO'/>
     <input type='button' onclick="location.href = '/';" value='Home'/>
@@ -104,9 +102,7 @@ function loadMeta() {
 
 function loadValue() {
     fetch("/api/scales").then(r => r.json()).then(r => {
-        document.getElementById("state").textContent = r.state;
         document.getElementById("value").textContent = r.value.toFixed(2);
-        document.getElementById("rawValue").textContent = r.rawValue;
         setTimeout(loadValue, 1000);
     })
     .catch(e => setTimeout(loadValue, 1000));
@@ -172,19 +168,35 @@ const char OK_page[] PROGMEM = R"=====(
 Ok
 )=====";
 
+const char BUSY_page[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<meta http-equiv="refresh" content="1;url=/">
+Busy
+)=====";
 
 void cssPage(){
-  server.send(200, "text/css", CSS_page);
+  server.send_P(200, "text/css", CSS_page);
 }
 void scalesPage(){
-  server.send(200, "text/html", SCALES_page);
+  if (state == READY) { 
+    server.send_P(200, "text/html", SCALES_page);
+  } else {
+    busyPage();
+  }
 }
 void calibrationPage(){
-  server.send(200, "text/html", CALIBRATION_page);
+  if (state == READY) { 
+    server.send_P(200, "text/html", CALIBRATION_page);  
+  } else {
+    busyPage();
+  }
 }
 void mainPage(){
-  server.send(200, "text/html", MAIN_page);
+  server.send_P(200, "text/html", MAIN_page);
 }
 void okPage(){
-  server.send(200, "text/html", OK_page);
+  server.send_P(200, "text/html", OK_page);
+}
+void busyPage(){
+  server.send_P(307, "text/html", BUSY_page);
 }

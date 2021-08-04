@@ -76,12 +76,14 @@ Kalman displayFilter = Kalman(1400, 80, 0.15); // плавный
 Kalman filter = Kalman(1000, 80, 0.4);         // резкий
 
 #define PUMPS_NO 8
-const String names[PUMPS_NO] PROGMEM      = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
-const byte pinForward[PUMPS_NO] PROGMEM   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
-const byte pinReverse[PUMPS_NO] PROGMEM   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
-const int staticPreload[PUMPS_NO] PROGMEM = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
+const String names[PUMPS_NO]      = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
+const byte pinForward[PUMPS_NO]   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
+const byte pinReverse[PUMPS_NO]   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
+const int staticPreload[PUMPS_NO] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
+const char* stateStr[]           = {"Ready", "Working"};
+enum State {READY, WORKING};
 
-String wstatus;
+State state;
 float goal[PUMPS_NO];
 float curvol[PUMPS_NO];
 float fscl;
@@ -126,7 +128,7 @@ void setup() {
   lcd.print(WiFi.localIP()); 
   scale.power_up();
 
-  wstatus=F("Ready");
+  state = READY;
 
   server.handleClient();
 
@@ -145,7 +147,7 @@ void loop() {
   lcd.print(toString(rawToUnits(fscl), 2));
   lcd.print(F("         "));
   lcd.setCursor(10, 0);
-  lcd.print(F("Ready  ")); 
+  lcd.print(stateStr[state]); 
 }
 
 String toString(float x, byte precision) {
@@ -168,10 +170,14 @@ void metaApi() {
 }
 
 void scalesApi() {
+  if (state != READY) {
+    busyPage(); 
+    return; 
+  }
+  
   String message;
   message.reserve(255);
   message += '{';
-  append(message, F("state"),    wstatus,               true,  false);
   append(message, F("value"),    rawToUnits(fscl),      false, false);
   append(message, F("rawValue"), fscl,                  false, false);
   append(message, F("rawZero"),  scale.get_offset(),    false, true);
@@ -184,35 +190,49 @@ void statusApi() {
   String message;
   message.reserve(512);
   message += '{';
-  append(message, F("state"), wstatus,         true,  false);
-  append(message, F("timer"), ms / 1000,       false, false);
-  append(message, F("sumA"),  sumA,            false, false);
-  append(message, F("sumB"),  sumB,            false, false);
-  append(message, F("pumpWorking"), nPump,     false, false); 
-  append(message, F("goal"),   goal,           false, false);
-  append(message, F("result"), curvol,         false, true);
+  append(message, F("state"),  stateStr[state],   true,  false);
+  append(message, F("timer"),  ms / 1000,         false, false);
+  append(message, F("sumA"),   sumA,              false, false);
+  append(message, F("sumB"),   sumB,              false, false);
+  append(message, F("pumpWorking"),  nPump,       false, false); 
+  append(message, F("goal"),   goal,              false, false);
+  append(message, F("result"), curvol,            false, true);
   message += '}';
   server.send(200, "text/json", message);  
 }
 
 void tareApi(){
-  tareScalesWithCheck(255);
-  okPage();
+  if (state == READY) {
+    tareScalesWithCheck(255);
+    okPage();
+  } else {
+    busyPage(); 
+  }
 }
 
 void testApi(){
-    okPage();
-    for (int i = 0; i < PUMPS_NO; i++) {
-      lcd.home();lcd.print(F("Start "));lcd.print(names[i]);
-      PumpStart(i);delay(3000);
-      lcd.home();lcd.print(F("Revers       "));
-      PumpReverse(i);delay(3000);
-      lcd.home();lcd.print(F("Stop       "));
-      PumpStop(i);delay(1000);
-    }
+  if (state != READY) { 
+    busyPage(); 
+    return; 
+  }  
+  
+  okPage();
+  for (int i = 0; i < PUMPS_NO; i++) {
+    lcd.home();lcd.print(F("Start "));lcd.print(names[i]);
+    PumpStart(i);delay(3000);
+    lcd.home();lcd.print(F("Revers       "));
+    PumpReverse(i);delay(3000);
+    lcd.home();lcd.print(F("Stop       "));
+    PumpStop(i);delay(1000);
+  }
 }
 
 void startApi() {
+  if (state != READY) { 
+    busyPage(); 
+    return; 
+  }
+    
   sTime = millis();
   eTime = 0;
   sumA = 0;
@@ -225,7 +245,7 @@ void startApi() {
   
   okPage();
 
-  wstatus=F("Working");
+  state = WORKING;
   float offsetBeforePump = scale.get_offset();
   scale.set_scale(scale_calibration_A); //A side
   float rawStart = readScalesWithCheck(255);
@@ -246,7 +266,8 @@ void startApi() {
 
   scale.set_offset(offsetBeforePump);
   eTime = millis();
-  wstatus = F("Ready");
+  nPump = 0;
+  state = READY;
 
   reportToWega();
 
