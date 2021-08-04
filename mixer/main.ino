@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////
 // main code - don't change if you don't know what you are doing //
 ///////////////////////////////////////////////////////////////////
-#define FW_version  "2.1.0 igor"
+const char FW_version[] PROGMEM = "2.1.0 igor";
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -80,15 +80,15 @@ const String names[PUMPS_NO]      = {pump1n, pump2n, pump3n, pump4n, pump5n, pum
 const byte pinForward[PUMPS_NO]   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
 const byte pinReverse[PUMPS_NO]   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
 const int staticPreload[PUMPS_NO] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
-const char* stateStr[]           = {"Ready", "Working"};
+const char* stateStr[]            = {"Ready", "Working"};
 enum State {READY, WORKING};
 
 State state;
 float goal[PUMPS_NO];
 float curvol[PUMPS_NO];
-float fscl;
+float rawValue;
 float sumA,sumB;
-int nPump;
+int pumpWorking;
 unsigned long sTime, eTime;
 
 void setup() {
@@ -123,7 +123,7 @@ void setup() {
   scale.set_scale(scale_calibration_A); //A side
   lcd.setCursor(0, 0);
   lcd.print(F("Start FW: "));
-  lcd.print(FW_version);
+  lcd.print(FPSTR(FW_version));
   lcd.setCursor(0, 1); 
   lcd.print(WiFi.localIP()); 
   scale.power_up();
@@ -142,9 +142,9 @@ void loop() {
   ArduinoOTA.handle();
   scale.set_scale(scale_calibration_A);
   readScales(16);
-  fscl = displayFilter.getEstimation();
+  rawValue = displayFilter.getEstimation();
   lcd.setCursor(0, 1);
-  lcd.print(toString(rawToUnits(fscl), 2));
+  lcd.print(toString(rawToUnits(rawValue), 2));
   lcd.print(F("         "));
   lcd.setCursor(10, 0);
   lcd.print(stateStr[state]); 
@@ -161,12 +161,12 @@ void metaApi() {
   String message;
   message.reserve(255);
   message += '{';
-  append(message, F("version"),     String(FW_version),        true,  false);
-  append(message, F("scalePointA"), scale_calibration_A,       false, false);
-  append(message, F("scalePointB"), scale_calibration_B,       false, false);  
-  append(message, F("names"),       names,                     true,  true);  
+  append(message,    F("version"),     FPSTR(FW_version),         true,  false);
+  append(message,    F("scalePointA"), scale_calibration_A,       false, false);
+  append(message,    F("scalePointB"), scale_calibration_B,       false, false);  
+  appendArr(message, F("names"),       names,                     true,  true);  
   message += '}'; 
-  server.send(200, "text/json", message);
+  server.send(200, "application/json", message);
 }
 
 void scalesApi() {
@@ -178,27 +178,27 @@ void scalesApi() {
   String message;
   message.reserve(255);
   message += '{';
-  append(message, F("value"),    rawToUnits(fscl),      false, false);
-  append(message, F("rawValue"), fscl,                  false, false);
+  append(message, F("value"),    rawToUnits(rawValue),  false, false);
+  append(message, F("rawValue"), rawValue,              false, false);
   append(message, F("rawZero"),  scale.get_offset(),    false, true);
   message += '}';
-  server.send(200, "text/json", message);
+  server.send(200, "application/json", message);
 } 
 
 void statusApi() {
-  unsigned long ms = sTime == 0 ? 0 : (eTime == 0 ? sTime - millis() : sTime - eTime);  
+  unsigned long ms = sTime == 0 ? 0 : (eTime == 0 ? millis() - sTime : eTime - sTime);  
   String message;
   message.reserve(512);
   message += '{';
-  append(message, F("state"),  stateStr[state],   true,  false);
-  append(message, F("timer"),  ms / 1000,         false, false);
-  append(message, F("sumA"),   sumA,              false, false);
-  append(message, F("sumB"),   sumB,              false, false);
-  append(message, F("pumpWorking"),  nPump,       false, false); 
-  append(message, F("goal"),   goal,              false, false);
-  append(message, F("result"), curvol,            false, true);
+  append(message,    F("state"),  stateStr[state],   true,  false);
+  append(message,    F("timer"),  ms / 1000,         false, false);
+  append(message,    F("sumA"),   sumA,              false, false);
+  append(message,    F("sumB"),   sumB,              false, false);
+  append(message,    F("pumpWorking"), pumpWorking,  false, false); 
+  appendArr(message, F("goal"),   goal,              false, false);
+  appendArr(message, F("result"), curvol,            false, true);
   message += '}';
-  server.send(200, "text/json", message);  
+  server.send(200, "application/json", message);  
 }
 
 void tareApi(){
@@ -266,7 +266,7 @@ void startApi() {
 
   scale.set_offset(offsetBeforePump);
   eTime = millis();
-  nPump = 0;
+  pumpWorking = 0;
   state = READY;
 
   reportToWega();
@@ -359,7 +359,7 @@ void pumpToValue(float capValue, float capMillis, float targetValue, int n, floa
 
 // Функция налива
 float pumping(int n) {
-  nPump=n;
+  pumpWorking = n;
   float wt = goal[n];
   server.handleClient();
 
@@ -474,8 +474,8 @@ float pumping(int n) {
   PumpReverse(n);
   long endPreloadTime = millis() + max(preload, staticPreload[n]) * 1.5; 
   while (millis() < endPreloadTime) {
-      server.handleClient();
-      delay(10);
+    server.handleClient();
+    delay(10);
   }
   PumpStop(n);
     
@@ -520,7 +520,7 @@ float rawToUnits(float raw, float calibrationPoint) {
 
 // функции для генерации json
 template<typename T>
-void append(String& src, const String& name, const T& value, bool quote, boolean last) {
+void append(String& src, const __FlashStringHelper* name, const T& value, bool quote, boolean last) {
   src += '"'; src += name; src += "\":";
   if (quote) src += '"';
   src += value;
@@ -530,7 +530,7 @@ void append(String& src, const String& name, const T& value, bool quote, boolean
 }
 
 template<typename T>
-void append(String& src, const String& name, T value[PUMPS_NO], bool quote, bool last) {
+void appendArr(String& src, const __FlashStringHelper* name, T value[PUMPS_NO], bool quote, bool last) {
   src += '"'; src += name; src += "\":";
   src += '[';
   for (int i = 0; i < PUMPS_NO; i++) {
