@@ -174,32 +174,29 @@ const char BUSY_page[] PROGMEM = R"=====(
 Busy
 )=====";
 
-const char MIME_HTML[] PROGMEM = "text/html";
-const char MIME_CSS[] PROGMEM  = "text/css";
-
 void cssPage(){
-  server.send_P(200, MIME_CSS, CSS_page);
+  server.send_P(200, PSTR("text/css"), CSS_page);
 }
 void scalesPage(){
   if (state == READY) { 
-    server.send_P(200, MIME_HTML, SCALES_page);
+    server.send_P(200, PSTR("text/html"), SCALES_page);
   } else {
     busyPage();
   }
 }
 void calibrationPage(){
   if (state == READY) { 
-    server.send_P(200, MIME_HTML, CALIBRATION_page);  
+    server.send_P(200, PSTR("text/html"), CALIBRATION_page);  
   } else {
     busyPage();
   }
 }
 void mainPage(){
-  server.send_P(200, MIME_HTML, MAIN_page);
+  server.send_P(200, PSTR("text/html"), MAIN_page);
 }
 void okPage(){
-  server.send_P(200, MIME_HTML, OK_page);
+  server.send_P(200, PSTR("text/html"), OK_page);
 }
 void busyPage(){
-  server.send_P(307, MIME_HTML, BUSY_page);
+  server.send_P(307, PSTR("text/html"), BUSY_page);
 }

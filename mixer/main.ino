@@ -76,7 +76,7 @@ Kalman displayFilter = Kalman(1400, 80, 0.15); // плавный
 Kalman filter = Kalman(1000, 80, 0.4);         // резкий
 
 #define PUMPS_NO 8
-const String names[PUMPS_NO]      = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
+const char* names[PUMPS_NO]       = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
 const byte pinForward[PUMPS_NO]   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
 const byte pinReverse[PUMPS_NO]   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
 const int staticPreload[PUMPS_NO] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
@@ -86,7 +86,6 @@ enum State {READY, WORKING};
 State state;
 float goal[PUMPS_NO];
 float curvol[PUMPS_NO];
-float rawValue;
 float sumA,sumB;
 int pumpWorking;
 unsigned long sTime, eTime;
@@ -142,9 +141,8 @@ void loop() {
   ArduinoOTA.handle();
   scale.set_scale(scale_calibration_A);
   readScales(16);
-  rawValue = displayFilter.getEstimation();
   lcd.setCursor(0, 1);
-  lcd.print(toString(rawToUnits(rawValue), 2));
+  lcd.print(toString(rawToUnits(displayFilter.getEstimation()), 2));
   lcd.print(F("         "));
   lcd.setCursor(10, 0);
   lcd.print(stateStr[state]); 
@@ -158,9 +156,9 @@ String toString(float x, byte precision) {
 }
 
 void metaApi() {
-  String message;
+  String message((char*)0);
   message.reserve(255);
-  message += '{';
+  message += F("{\n");
   append(message,    F("version"),     FPSTR(FW_version),         true,  false);
   append(message,    F("scalePointA"), scale_calibration_A,       false, false);
   append(message,    F("scalePointB"), scale_calibration_B,       false, false);  
@@ -175,9 +173,10 @@ void scalesApi() {
     return; 
   }
   
-  String message;
+  float rawValue = displayFilter.getEstimation();
+  String message((char*)0);
   message.reserve(255);
-  message += '{';
+  message += F("{\n");
   append(message, F("value"),    rawToUnits(rawValue),  false, false);
   append(message, F("rawValue"), rawValue,              false, false);
   append(message, F("rawZero"),  scale.get_offset(),    false, true);
@@ -187,9 +186,9 @@ void scalesApi() {
 
 void statusApi() {
   unsigned long ms = sTime == 0 ? 0 : (eTime == 0 ? millis() - sTime : eTime - sTime);  
-  String message;
+  String message((char*)0);
   message.reserve(512);
-  message += '{';
+  message += F("{\n");
   append(message,    F("state"),  stateStr[state],   true,  false);
   append(message,    F("timer"),  ms / 1000,         false, false);
   append(message,    F("sumA"),   sumA,              false, false);
@@ -276,9 +275,9 @@ void startApi() {
 }
 
 void reportToWega() {
-  String httpstr;
-  httpstr.reserve(200);
-  httpstr += WegaApiUrl;
+  String httpstr((char*)0);
+  httpstr.reserve(512);
+  httpstr += F(WegaApiUrl);
   httpstr += '?';
   for(byte i = 0; i < PUMPS_NO; i++) {
     httpstr += F("&p");
@@ -318,7 +317,7 @@ void printValueAndPercent(float value, float targetValue) {
     lcd.setCursor(0, 1); 
     lcd.print(toString(value, 2)); 
     if (!isnan(targetValue)) {
-      lcd.print(" ("); lcd.print(String(value/targetValue*100,1)); lcd.print("%)");
+      lcd.print(F(" (")); lcd.print(String(value/targetValue*100,1)); lcd.print(F("%)"));
     }
     lcd.print(F("    "));
     yield();
@@ -364,7 +363,7 @@ float pumping(int n) {
   server.handleClient();
 
   if (wt <= 0) {
-    lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(":");lcd.print(wt);
+    lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(F(":"));lcd.print(wt);
     lcd.setCursor(10, 0);
     lcd.print(F("SKIP..   "));
     server.handleClient();
@@ -389,7 +388,7 @@ float pumping(int n) {
     delay(10);
   
     lcd.clear(); lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(F(" Preload..."));
-    lcd.setCursor(0, 1);lcd.print(F(" Preload="));lcd.print(preload);lcd.print("ms");
+    lcd.setCursor(0, 1);lcd.print(F(" Preload="));lcd.print(preload);lcd.print(F("ms"));
     PumpStart(n);
     delay(preload);
     PumpStop(n);
@@ -411,12 +410,12 @@ float pumping(int n) {
       server.handleClient();
       delay(10);
     }
-    lcd.setCursor(0, 1);lcd.print(F(" Preload="));lcd.print(preload);lcd.print("ms");
+    lcd.setCursor(0, 1);lcd.print(F(" Preload="));lcd.print(preload);lcd.print(F("ms"));
     delay(1000);
   }
   
   // до конечного веса минус 0.2 - 0.5 грамм по половине от остатка 
-  lcd.clear(); lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(":");lcd.print(wt);lcd.print(F(" Fast..."));
+  lcd.clear(); lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(F(":"));lcd.print(wt);lcd.print(F(" Fast..."));
   float performance = 0.0007;
   float dropTreshold = wt - value > 1.0 ? 0.2 : 0.5; // определяет сколько оставить на капельный налив
   float valueToPump = wt - dropTreshold - value;
@@ -437,7 +436,7 @@ float pumping(int n) {
   }
   
   // капельный налив
-  lcd.clear(); lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(":");lcd.print(wt);lcd.print(F(" Drop..."));
+  lcd.clear(); lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(F(":"));lcd.print(wt);lcd.print(F(" Drop..."));
   float prevValue = value;
   int sk = 25;
   while (value < wt - 0.01) {
@@ -521,17 +520,17 @@ float rawToUnits(float raw, float calibrationPoint) {
 // функции для генерации json
 template<typename T>
 void append(String& src, const __FlashStringHelper* name, const T& value, bool quote, boolean last) {
-  src += '"'; src += name; src += "\":";
+  src += '"'; src += name; src += F("\":");
   if (quote) src += '"';
   src += value;
   if (quote) src += '"';
-  if (last) src += ',';  
+  if (!last) src += ',';  
   src += '\n';
 }
 
 template<typename T>
 void appendArr(String& src, const __FlashStringHelper* name, T value[PUMPS_NO], bool quote, bool last) {
-  src += '"'; src += name; src += "\":";
+  src += '"'; src += name; src += F("\":");
   src += '[';
   for (int i = 0; i < PUMPS_NO; i++) {
     if (quote) src += '"';
@@ -540,6 +539,6 @@ void appendArr(String& src, const __FlashStringHelper* name, T value[PUMPS_NO], 
     if (i < (PUMPS_NO - 1)) src += ',';
   }
   src += ']';
-  if (last) src += ',';  
+  if (!last) src += ',';  
   src += '\n';
 }
