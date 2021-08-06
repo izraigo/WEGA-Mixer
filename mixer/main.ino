@@ -236,23 +236,23 @@ void startApi() {
   eTime = 0;
   sumA = 0;
   sumB = 0;
- 
+
   for (byte i = 0; i < PUMPS_NO; i ++) {
-    goal[i] = server.arg("p" + (i + 1)).toFloat();
+    goal[i] = server.arg(String(F("p")) + (i + 1)).toFloat();
     curvol[i] = 0;
   }
-  
+
   okPage();
 
   state = WORKING;
   float offsetBeforePump = scale.get_offset();
   scale.set_scale(scale_calibration_A); //A side
-  float rawStart = readScalesWithCheck(255);
+  float raw1 = readScalesWithCheck(255);
   pumping(0);
   pumping(1);
   pumping(2);
-  float rawMid = readScalesWithCheck(255);   
-  sumA = (rawMid - rawStart) / scale_calibration_A;
+  float raw2 = readScalesWithCheck(255);   
+  sumA = (raw2 - raw1) / scale_calibration_A;
   
   scale.set_scale(scale_calibration_B); //B side 
   pumping(3);
@@ -260,8 +260,8 @@ void startApi() {
   pumping(5);
   pumping(6);
   pumping(7); 
-  float rawEnd = readScalesWithCheck(255); 
-  sumB = (rawEnd - rawMid) / scale_calibration_B;
+  float raw3 = readScalesWithCheck(255); 
+  sumB = (raw3 - raw2) / scale_calibration_B;
 
   scale.set_offset(offsetBeforePump);
   eTime = millis();
@@ -519,7 +519,7 @@ float rawToUnits(float raw, float calibrationPoint) {
 
 // функции для генерации json
 template<typename T>
-void append(String& src, const __FlashStringHelper* name, const T& value, bool quote, boolean last) {
+void append(String& src, const __FlashStringHelper* name, const T& value, const bool quote, const bool last) {
   src += '"'; src += name; src += F("\":");
   if (quote) src += '"';
   src += value;
@@ -529,7 +529,7 @@ void append(String& src, const __FlashStringHelper* name, const T& value, bool q
 }
 
 template<typename T>
-void appendArr(String& src, const __FlashStringHelper* name, T value[PUMPS_NO], bool quote, bool last) {
+void appendArr(String& src, const __FlashStringHelper* name, const T value[PUMPS_NO], const bool quote, const bool last) {
   src += '"'; src += name; src += F("\":");
   src += '[';
   for (int i = 0; i < PUMPS_NO; i++) {

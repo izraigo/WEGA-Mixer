@@ -170,8 +170,8 @@ Ok
 
 const char BUSY_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
-<meta http-equiv="refresh" content="1;url=/">
-Busy
+<meta http-equiv="refresh" content="5;url=/">
+Busy. Try later
 )=====";
 
 void cssPage(){
