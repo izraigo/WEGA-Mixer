@@ -9,15 +9,13 @@ const char FW_version[] PROGMEM = "2.1.0 igor";
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-ESP8266WebServer server(80);
-
 #include <WiFiClient.h>
 #include <ESP8266HTTPClient.h>
-
-
 #include <Wire.h>
+#include "src/LiquidCrystal_I2C/LiquidCrystal_I2C.h"
+#include "src/HX711/src/HX711.h"
 #include "src/Adafruit_MCP23017/Adafruit_MCP23017.h"
-Adafruit_MCP23017 mcp;
+
 // Assign ports names
 // Here is the naming convention:
 // A0=0 .. A7=7
@@ -40,14 +38,6 @@ Adafruit_MCP23017 mcp;
 #define B5 13
 #define B6 14
 #define B7 15
-
-#include "src/LiquidCrystal_I2C/LiquidCrystal_I2C.h"
-LiquidCrystal_I2C lcd(0x27,16,2); // Check I2C address of LCD, normally 0x27 or 0x3F
-
-#include "src/HX711/src/HX711.h"
-const int LOADCELL_DOUT_PIN = D5;
-const int LOADCELL_SCK_PIN = D6;
-HX711 scale;
 
 class Kalman { // https://github.com/denyssene/SimpleKalmanFilter
   private:
@@ -73,7 +63,7 @@ class Kalman { // https://github.com/denyssene/SimpleKalmanFilter
 };
 
 Kalman displayFilter = Kalman(1400, 80, 0.15); // плавный
-Kalman filter = Kalman(1000, 80, 0.4);         // резкий
+Kalman filter        = Kalman(1000, 80, 0.4);  // резкий
 
 #define PUMPS_NO 8
 const char* names[PUMPS_NO]       = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
@@ -90,10 +80,26 @@ float sumA,sumB;
 int pumpWorking;
 unsigned long sTime, eTime;
 
+ESP8266WebServer server(80);
+Adafruit_MCP23017 mcp;
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Check I2C address of LCD, normally 0x27 or 0x3F
+HX711 scale;
+
 void setup() {
+  Wire.begin(D1, D2);
+  lcd.begin(D1, D2);      // SDA=D1, SCL=D2               
+  lcd.backlight();
+
+  lcd.setCursor(0, 0);
+  lcd.print(F("Start FW: "));
+  lcd.print(FPSTR(FW_version));
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {delay(500);}
+  lcd.setCursor(0, 1); 
+  lcd.print(WiFi.localIP()); 
+
   MDNS.begin("mixer");
   MDNS.addService("http", "tcp", 80);
   server.on("/api/meta", metaApi);
@@ -112,47 +118,39 @@ void setup() {
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {});
   ArduinoOTA.onError([](ota_error_t error) {});
   ArduinoOTA.begin();
+  
+  mcp.begin();
+  for (byte i = 0; i < PUMPS_NO; i++) {
+    mcp.pinMode(pinForward[i], OUTPUT); 
+    mcp.pinMode(pinReverse[i], OUTPUT);
+  }
 
-  Wire.begin(D1, D2);
-  //Wire.setClock(400000L);   // 400 kHz I2C clock speed
-  lcd.begin(D1,D2);      // SDA=D1, SCL=D2               
-  lcd.backlight();
-
-  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-  scale.set_scale(scale_calibration_A); //A side
-  lcd.setCursor(0, 0);
-  lcd.print(F("Start FW: "));
-  lcd.print(FPSTR(FW_version));
-  lcd.setCursor(0, 1); 
-  lcd.print(WiFi.localIP()); 
+  scale.begin(D5, D6); // DOUT = D5 SCK = D6;
+  scale.set_scale(scale_calibration_A);
   scale.power_up();
-
-  state = READY;
-
-  server.handleClient();
-
   delay (3000);
-  tareScalesWithCheck(255);
+  tareScalesWithCheck(255);  
+  
   lcd.clear();
+  state = READY;
 }
 
 void loop() {
   server.handleClient();
   ArduinoOTA.handle();
-  scale.set_scale(scale_calibration_A);
   readScales(16);
   lcd.setCursor(0, 1);
-  lcd.print(toString(rawToUnits(displayFilter.getEstimation()), 2));
+  lcd.print(truncNegativeZero(rawToUnits(displayFilter.getEstimation()), 2), 2);
   lcd.print(F("         "));
   lcd.setCursor(10, 0);
   lcd.print(stateStr[state]); 
 }
 
-String toString(float x, byte precision) {
+float truncNegativeZero (float x, byte precision) {
   if (x < 0 && -x < pow(0.1, precision)) {
-    x = 0;
+    return 0;
   }
-  return String(x, precision);
+  return x;
 }
 
 void metaApi() {
@@ -201,12 +199,13 @@ void statusApi() {
 }
 
 void tareApi(){
-  if (state == READY) {
-    tareScalesWithCheck(255);
-    okPage();
-  } else {
+  if (state != READY) { 
     busyPage(); 
-  }
+    return; 
+  }  
+ 
+  tareScalesWithCheck(255);
+  okPage();
 }
 
 void testApi(){
@@ -246,7 +245,7 @@ void startApi() {
 
   state = WORKING;
   float offsetBeforePump = scale.get_offset();
-  scale.set_scale(scale_calibration_A); //A side
+  scale.set_scale(scale_calibration_A);
   float raw1 = readScalesWithCheck(255);
   pumping(0);
   pumping(1);
@@ -254,23 +253,23 @@ void startApi() {
   float raw2 = readScalesWithCheck(255);   
   sumA = (raw2 - raw1) / scale_calibration_A;
   
-  scale.set_scale(scale_calibration_B); //B side 
+  scale.set_scale(scale_calibration_B); 
   pumping(3);
   pumping(4);
   pumping(5);
   pumping(6);
   pumping(7); 
+  pumpWorking = 0;
+  eTime = millis();
+
   float raw3 = readScalesWithCheck(255); 
   sumB = (raw3 - raw2) / scale_calibration_B;
 
-  scale.set_offset(offsetBeforePump);
-  eTime = millis();
-  pumpWorking = 0;
-  state = READY;
-
   reportToWega();
 
-  delay(1000);
+  scale.set_scale(scale_calibration_A);
+  scale.set_offset(offsetBeforePump);
+  state = READY;
   lcd.clear();
 }
 
@@ -283,11 +282,11 @@ void reportToWega() {
     httpstr += F("&p");
     httpstr += (i + 1);
     httpstr += '=';
-    httpstr += String(curvol[i],3);
+    httpstr += String(curvol[i], 3);
     httpstr += F("&v");
     httpstr += (i + 1);
     httpstr += '=';
-    httpstr += String(goal[i],3);
+    httpstr += String(goal[i], 3);
   } 
   WiFiClient client;
   HTTPClient http;
@@ -298,26 +297,24 @@ void reportToWega() {
 
 // Функции помп
 float PumpStart(int n) {
-  mcp.begin();
-  mcp.pinMode(pinForward[n], OUTPUT); mcp.pinMode(pinReverse[n], OUTPUT);
-  mcp.digitalWrite(pinForward[n], HIGH);mcp.digitalWrite(pinReverse[n], LOW);
+  #if (RUSTY_MOTOR_KICK)
+  mcp.digitalWrite(pinForward[n], LOW); mcp.digitalWrite(pinReverse[n], HIGH);
+  delay(4);
+  #endif
+  mcp.digitalWrite(pinForward[n], HIGH); mcp.digitalWrite(pinReverse[n], LOW);
 }
 float PumpStop(int n) {
-  mcp.begin();
-  mcp.pinMode(pinForward[n], OUTPUT); mcp.pinMode(pinReverse[n], OUTPUT);
-  mcp.digitalWrite(pinForward[n], LOW);mcp.digitalWrite(pinReverse[n], LOW);
+  mcp.digitalWrite(pinForward[n], LOW); mcp.digitalWrite(pinReverse[n], LOW);
 }
 float PumpReverse(int n) {
-  mcp.begin();
-  mcp.pinMode(pinForward[n], OUTPUT); mcp.pinMode(pinReverse[n], OUTPUT);
-  mcp.digitalWrite(pinForward[n], LOW);mcp.digitalWrite(pinReverse[n], HIGH);
+  mcp.digitalWrite(pinForward[n], LOW); mcp.digitalWrite(pinReverse[n], HIGH);
 }
 
 void printValueAndPercent(float value, float targetValue) {
     lcd.setCursor(0, 1); 
-    lcd.print(toString(value, 2)); 
+    lcd.print(truncNegativeZero(value, 2), 2); 
     if (!isnan(targetValue)) {
-      lcd.print(F(" (")); lcd.print(String(value/targetValue*100,1)); lcd.print(F("%)"));
+      lcd.print(F(" (")); lcd.print(truncNegativeZero(value / targetValue * 100, 1), 1); lcd.print(F("%)"));
     }
     lcd.print(F("    "));
     yield();
@@ -348,7 +345,7 @@ void pumpToValue(float capValue, float capMillis, float targetValue, int n, floa
     readScales(1);
     value = rawToUnits(filter.getEstimation());
     maxValue = max(value, maxValue);
-    if (i % 10 == 0) printValueAndPercent(value, targetValue);
+    if (i % 16 == 0) printValueAndPercent(value, targetValue);
     i++;
   }
   PumpStop(n);
@@ -464,9 +461,9 @@ float pumping(int n) {
   }
 
   lcd.setCursor(0, 1);
-  lcd.print(String(value, 2));
+  lcd.print(value, 2);
   lcd.print(F(" ("));
-  lcd.print(value/wt*100, 2);
+  lcd.print(value / wt * 100, 2);
   lcd.print(F("%)      "));
 
   // реверс, высушить трубки
@@ -496,6 +493,7 @@ float readScales(int times) {
 float readScalesWithCheck(int times) {
   float value1 = readScales(times / 2);
   while (true) {
+    server.handleClient();
     delay(20);
     float value2 = readScales(times / 2);
     if (fabs(value1 - value2) < fabs(0.01 * scale_calibration_A)) {
