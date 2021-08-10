@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<link rel='stylesheet' type='text/css' href='style.css'/>
+<br>Value = <span id="value"></span>g
+<p>
+    <input type='button' onclick="fetch('/api/action/tare');" value='Set to ZERO'/>
+    <input type='button' onclick="location.href = '/';" value='Home'/>
+</p>
+ver : <span id="version">unknown</span>
+<script>
+function loadMeta() {
+    fetch("/api/meta.json").then(r => r.json()).then(r => {
+        document.getElementById("version").textContent = r.version;
+    })
+    .catch(e => setTimeout(loadMeta, 1000));
+}
+
+function loadValue() {
+    fetch("/api/scales.json")
+    .then(r => {
+        if (r.ok) return r.json();
+        throw new Error(r.status == 303 ? "Busy" : "Error " + status);
+    })
+    .then(r => {
+        document.getElementById("value").textContent = r.value.toFixed(2);
+        setTimeout(loadValue, 1000);
+    })
+    .catch(e => {
+        document.getElementById("value").textContent = e;
+        setTimeout(loadValue, 1000)
+    });
+}
+
+loadMeta();
+loadValue();
+</script>

@@ -70,8 +70,8 @@ const char* names[PUMPS_NO]       = {pump1n, pump2n, pump3n, pump4n, pump5n, pum
 const byte pinForward[PUMPS_NO]   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
 const byte pinReverse[PUMPS_NO]   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
 const int staticPreload[PUMPS_NO] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
-const char* stateStr[]            = {"Ready", "Working"};
-enum State {READY, WORKING};
+const char* stateStr[]            = {"Ready", "Working", "Busy"};
+enum State {STATE_READY, STATE_WORKING, STATE_BUSY};
 
 State state;
 float goal[PUMPS_NO];
@@ -105,9 +105,9 @@ void setup() {
   server.on("/api/meta", metaApi);
   server.on("/api/status", statusApi);
   server.on("/api/scales", scalesApi);
-  server.on("/api/start", startApi);
-  server.on("/api/tare", tareApi);
-  server.on("/api/test", testApi);
+  server.on("/api/action/start", startApi);
+  server.on("/api/action/tare", tareApi);
+  server.on("/api/action/test", testApi);
   server.on("/", mainPage);
   server.on("/scales", scalesPage);
   server.on("/calibration", calibrationPage);
@@ -132,7 +132,7 @@ void setup() {
   tareScalesWithCheck(255);  
   
   lcd.clear();
-  state = READY;
+  state = STATE_READY;
 }
 
 void loop() {
@@ -166,7 +166,7 @@ void metaApi() {
 }
 
 void scalesApi() {
-  if (state != READY) {
+  if (state != STATE_READY) {
     busyPage(); 
     return; 
   }
@@ -199,21 +199,22 @@ void statusApi() {
 }
 
 void tareApi(){
-  if (state != READY) { 
+  if (state != STATE_READY) { 
     busyPage(); 
     return; 
   }  
- 
+  state = STATE_BUSY;
   tareScalesWithCheck(255);
+  state = STATE_READY;
   okPage();
 }
 
 void testApi(){
-  if (state != READY) { 
+  if (state != STATE_READY) { 
     busyPage(); 
     return; 
   }  
-  
+  state = STATE_BUSY;
   okPage();
   for (int i = 0; i < PUMPS_NO; i++) {
     lcd.home();lcd.print(F("Start "));lcd.print(names[i]);
@@ -223,14 +224,15 @@ void testApi(){
     lcd.home();lcd.print(F("Stop       "));
     PumpStop(i);delay(1000);
   }
+  state = STATE_READY;
 }
 
 void startApi() {
-  if (state != READY) { 
+  if (state != STATE_READY) { 
     busyPage(); 
     return; 
   }
-    
+  state = STATE_WORKING;  
   sTime = millis();
   eTime = 0;
   sumA = 0;
@@ -243,7 +245,6 @@ void startApi() {
 
   okPage();
 
-  state = WORKING;
   float offsetBeforePump = scale.get_offset();
   scale.set_scale(scale_calibration_A);
   float raw1 = readScalesWithCheck(255);
@@ -269,7 +270,7 @@ void startApi() {
 
   scale.set_scale(scale_calibration_A);
   scale.set_offset(offsetBeforePump);
-  state = READY;
+  state = STATE_READY;
   lcd.clear();
 }
 
@@ -298,16 +299,20 @@ void reportToWega() {
 // Функции помп
 float PumpStart(int n) {
   #if (RUSTY_MOTOR_KICK)
-  mcp.digitalWrite(pinForward[n], LOW); mcp.digitalWrite(pinReverse[n], HIGH);
+  mcp.digitalWrite(pinForward[n], LOW); 
+  mcp.digitalWrite(pinReverse[n], HIGH);
   delay(4);
   #endif
-  mcp.digitalWrite(pinForward[n], HIGH); mcp.digitalWrite(pinReverse[n], LOW);
+  mcp.digitalWrite(pinForward[n], HIGH); 
+  mcp.digitalWrite(pinReverse[n], LOW);
 }
 float PumpStop(int n) {
-  mcp.digitalWrite(pinForward[n], LOW); mcp.digitalWrite(pinReverse[n], LOW);
+  mcp.digitalWrite(pinForward[n], LOW); 
+  mcp.digitalWrite(pinReverse[n], LOW);
 }
 float PumpReverse(int n) {
-  mcp.digitalWrite(pinForward[n], LOW); mcp.digitalWrite(pinReverse[n], HIGH);
+  mcp.digitalWrite(pinForward[n], LOW); 
+  mcp.digitalWrite(pinReverse[n], HIGH);
 }
 
 void printValueAndPercent(float value, float targetValue) {
