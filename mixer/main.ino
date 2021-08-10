@@ -377,7 +377,6 @@ float pumping(int n) {
   float value = 0;
   tareScalesWithCheck(255);
   server.handleClient();
-  delay(10);
 
   int preload;
   if (wt < 0.5) { // статический прелоад
@@ -387,7 +386,6 @@ float pumping(int n) {
     delay(preload);
     PumpStop(n);
     server.handleClient();
-    delay(10);
   
     lcd.clear(); lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(F(" Preload..."));
     lcd.setCursor(0, 1);lcd.print(F(" Preload="));lcd.print(preload);lcd.print(F("ms"));
@@ -395,11 +393,9 @@ float pumping(int n) {
     delay(preload);
     PumpStop(n);
     server.handleClient();
-    delay(10);
 
     value = rawToUnits(readScalesWithCheck(128));
     server.handleClient();
-    delay(10);
   } else { // прелоад до первой капли
     lcd.clear(); lcd.setCursor(0, 0); lcd.print(names[n]);lcd.print(F(" Preload..."));
     preload = 0;
@@ -410,7 +406,6 @@ float pumping(int n) {
       value = rawToUnits(readScalesWithCheck(128));
       curvol[n]=value;
       server.handleClient();
-      delay(10);
     }
     lcd.setCursor(0, 1);lcd.print(F(" Preload="));lcd.print(preload);lcd.print(F("ms"));
     delay(1000);
@@ -433,7 +428,6 @@ float pumping(int n) {
       if (endTime - startTime > 200 && value-curvol[n] > 0.15) performance = max(performance, (value - curvol[n]) / (endTime - startTime));
       curvol[n]=value;
       server.handleClient();
-      delay(10);
     }
   }
   
