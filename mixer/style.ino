@@ -75,7 +75,7 @@ function loadStatus() {
                 let vol = r.result[i - 1];
                 let e = document.getElementById('r' + i);
                 e.textContent = vol ? '=' + vol.toFixed(2) + ' ' + (vol / plannedVol * 100 - 100).toFixed(2) + '%' : '';
-                e.style.fontWeight = r.pumpWorking == i ? 'bold' : 'normal'; 
+                e.style.fontWeight = r.pumpWorking == i - 1 ? 'bold' : 'normal'; 
             }
         }
         if (isReady) {
