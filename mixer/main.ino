@@ -66,11 +66,11 @@ Kalman displayFilter = Kalman(1400, 80, 0.15); // плавный
 Kalman filter        = Kalman(1000, 80, 0.4);  // резкий
 
 #define PUMPS_NO 8
-const char* names[PUMPS_NO]       = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
-const byte pinForward[PUMPS_NO]   = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
-const byte pinReverse[PUMPS_NO]   = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
-const int staticPreload[PUMPS_NO] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
-const char* stateStr[]            = {"Ready", "Working", "Busy"};
+const char* names[PUMPS_NO]        = {pump1n, pump2n, pump3n, pump4n, pump5n, pump6n, pump7n, pump8n};
+const byte pinForward[PUMPS_NO]    = {pump1,  pump2,  pump3,  pump4,  pump5,  pump6,  pump7,  pump8};
+const byte pinReverse[PUMPS_NO]    = {pump1r, pump2r, pump3r, pump4r, pump5r, pump6r, pump7r, pump8r};
+const long staticPreload[PUMPS_NO] = {pump1p, pump2p, pump3p, pump4p, pump5p, pump6p, pump7p, pump8p};
+const char* stateStr[]             = {"Ready", "Working", "Busy"};
 enum State {STATE_READY, STATE_WORKING, STATE_BUSY};
 
 State state;
@@ -219,7 +219,7 @@ void testApi(){
   for (byte i = 0; i < PUMPS_NO; i++) {
     printStage(i, F("Start")); 
     PumpStart(i); delay(3000);
-    printStage(i, F("Revers"));
+    printStage(i, F("Revrs"));
     PumpReverse(i); delay(3000);
     printStage(i, F("Stop"));
     PumpStop(i); delay(1000);
@@ -315,10 +315,10 @@ void PumpReverse(int n) {
   mcp.digitalWrite(pinReverse[n], HIGH);
 }
 // Функции вывода на экран
-// |1:Ca 34.45 Drops|...
+// |1:Ca 34.45 Drops|
 void printStage(byte n, const __FlashStringHelper* stage) {
   lcd.clear(); 
-  lcd.printf_P(PSTR("%4s %.2f %s...     "), names[n], goal[n], stage); 
+  lcd.printf_P(PSTR("%4s %.2f %s     "), names[n], goal[n], stage); 
 }
 
 // | Skip           |
@@ -360,21 +360,21 @@ void printPreload(int ms) {
 }
 
 
-void pumpToValue(float capValue, float capMillis, int n, float allowedOscillation, void (*printFunc)(float)) {
+long pumpToValue(byte n, float capValue, float capMillis, float allowedOscillation, void (*printFunc)(float)) {
   float value = rawToUnits(filter.getEstimation());
   if (value >= capValue) {
-    return;
+    return 0;
   }
-  long endMillis = millis() + capMillis;
+  unsigned long startMillis = millis();
+  unsigned long stopMillis = startMillis + capMillis;
   float maxValue = value;
   PumpStart(n);
   char exitCode;
-  long i = 0;
-  while (true) { 
+  for (long i = 0; true; i++) { 
     if (value >= capValue) {
       exitCode = 'V'; // вес достиг заданный
       break;
-    } else if (millis() >= endMillis) {
+    } else if (millis() >= stopMillis) {
       exitCode = 'T'; // истекло время
       break;
     } else if (value < maxValue - allowedOscillation) {
@@ -388,11 +388,11 @@ void pumpToValue(float capValue, float capMillis, int n, float allowedOscillatio
       printFunc(value);
       server.handleClient();
     }
-    i++;
   }
   PumpStop(n);
   printFunc(value);
   lcd.setCursor(15, 1);lcd.print(exitCode);
+  return millis() - startMillis;
 }
 
 // Функция налива
@@ -411,24 +411,21 @@ float pumping(int n) {
   tareScalesWithCheck(255);
   server.handleClient();
 
-  int preload = 0;
+  printStage(n, F("Load"));
+  long preload = 0;
   if (goal[n] < 0.5) { // статический прелоад
     preload = staticPreload[n];
-    printStage(n, F("Reverse"));
+
+    printProgress(F("Reverse"));
     PumpReverse(n); wait(preload, 10); PumpStop(n);
-  
-    printStage(n, F("Preload"));
     printPreload(preload);
     PumpStart(n); wait(preload, 10); PumpStop(n);
 
     curvol[n] = rawToUnits(readScalesWithCheck(128));
     server.handleClient();
   } else { // прелоад до первой капли
-    printStage(n, F("Preload"));
     while (curvol[n] < 0.02) {
-      long startTime = millis();
-      pumpToValue(0.03, staticPreload[n] * 2, n, 0.1, printProgressValueOnly);
-      preload += millis() - startTime;
+      preload += pumpToValue(n, 0.03, staticPreload[n] * 2, 0.1, printProgressValueOnly);
       curvol[n] = rawToUnits(readScalesWithCheck(128));
       server.handleClient();
     }
@@ -438,8 +435,7 @@ float pumping(int n) {
   
   // до конечного веса минус 0.2 - 0.5 грамм по половине от остатка 
   printStage(n, F("Fast"));
-  float prevValue;
-  float performance = 0.0007;
+  float performance = 0.0007;                                 // производительность грамм/мс при 12v и трубке 2x4
   float dropTreshold = goal[n] - curvol[n] > 1.0 ? 0.2 : 0.5; // определяет сколько оставить на капельный налив
   float valueToPump = goal[n] - curvol[n] - dropTreshold;
   float allowedOscillation = valueToPump < 1.0 ? 1.5 : 3.0;  // допустимое раскачивание, чтобы остановитmся при помехах/раскачивании, важно на малых объемах  
@@ -447,32 +443,27 @@ float pumping(int n) {
     while ((valueToPump = goal[n] - curvol[n] - dropTreshold) > 0) {
       if (valueToPump > 0.2) valueToPump = valueToPump / 2;  // качать по половине от остатка
       long timeToPump = valueToPump / performance;           // ограничение по времени
-      long startTime = millis();
-      pumpToValue(curvol[n] + valueToPump, timeToPump, n, allowedOscillation, printProgress);
-      long endTime = millis();
-      prevValue = curvol[n];
+      long workedTime = pumpToValue(n, curvol[n] + valueToPump, timeToPump, allowedOscillation, printProgress);
+      float prevValue = curvol[n];
       curvol[n] = rawToUnits(readScalesWithCheck(128));
-      if (endTime - startTime > 200 && curvol[n] - prevValue > 0.15) performance = max(performance, (curvol[n] - prevValue) / (endTime - startTime));
+      if (workedTime > 200 && curvol[n] - prevValue > 0.15) performance = max(performance, (curvol[n] - prevValue) / workedTime);
       server.handleClient();
     }
   }
   
   // капельный налив
   printStage(n, F("Drops"));
-  prevValue = curvol[n];
   int sk = 25;
   while (curvol[n] < goal[n] - 0.01) {
     printProgress(curvol[n], sk);
+    PumpStart(n); delay(sk); PumpStop(n);
       
+    float prevValue = curvol[n];
+    curvol[n] = rawToUnits(readScalesWithCheck(128));
     if (curvol[n] - prevValue < 0.01) {sk = min(80, sk + 2);}
     if (curvol[n] - prevValue > 0.01) {sk = max(2, sk - 2);}
     if (curvol[n] - prevValue > 0.1 ) {sk = 0;}
-
-    PumpStart(n); delay(sk); PumpStop(n);
-
-    prevValue = curvol[n];
-    curvol[n] = rawToUnits(readScalesWithCheck(128));
-
+    
     server.handleClient();
   }
 
