@@ -318,7 +318,7 @@ void PumpReverse(int n) {
 // |1:Ca 34.45 Drops|
 void printStage(byte n, const __FlashStringHelper* stage) {
   lcd.clear(); 
-  lcd.printf_P(PSTR("%4s %.2f %s     "), names[n], goal[n], stage); 
+  lcd.printf_P(PSTR("%4s %.2f %S     "), names[n], goal[n], stage); 
 }
 
 // | Skip           |
@@ -356,7 +356,7 @@ void printResult(float value) {
 // |Preload=12000ms |
 void printPreload(int ms) {
   lcd.setCursor(0, 1);
-  lcd.setCursor(0, 1); lcd.printf_P(PSTR("Preload=%dms    "), ms);
+  lcd.printf_P(PSTR("Preload=%dms    "), ms);
 }
 
 
@@ -452,10 +452,11 @@ float pumping(int n) {
   }
   
   // капельный налив
-  printStage(n, F("Drops"));
+  printStage(n, F("Drop"));
   int sk = 25;
   while (curvol[n] < goal[n] - 0.01) {
     printProgress(curvol[n], sk);
+    
     PumpStart(n); delay(sk); PumpStop(n);
       
     float prevValue = curvol[n];
