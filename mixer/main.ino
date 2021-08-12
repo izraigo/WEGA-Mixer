@@ -147,10 +147,7 @@ void loop() {
 }
 
 float truncNegativeZero (float x, byte precision) {
-  if (x < 0 && -x < pow(0.1, precision)) {
-    return 0;
-  }
-  return x;
+  return x < 0 && -x < pow(0.1, precision)) ? 0 : x;
 }
 
 void metaApi() {
@@ -217,12 +214,9 @@ void testApi(){
   state = STATE_BUSY;
   okPage();
   for (byte i = 0; i < PUMPS_NO; i++) {
-    printStage(i, F("Start")); 
-    PumpStart(i); delay(3000);
-    printStage(i, F("Revrs"));
-    PumpReverse(i); delay(3000);
-    printStage(i, F("Stop"));
-    PumpStop(i); delay(1000);
+    printStage(i, F("Start")); pumpStart(i); delay(3000);
+    printStage(i, F("Revrs")); pumpReverse(i); delay(3000);
+    printStage(i, F("Stop"));  pumpStop(i); delay(1000);
   }
   state = STATE_READY;
 }
@@ -261,8 +255,7 @@ void startApi() {
   pumping(6);
   pumping(7); 
   pumpWorking = -1;
-  eTime = millis();
-
+  
   float raw3 = readScalesWithCheck(255); 
   sumB = (raw3 - raw2) / scale_calibration_B;
 
@@ -270,6 +263,8 @@ void startApi() {
 
   scale.set_scale(scale_calibration_A);
   scale.set_offset(offsetBeforePump);
+
+  eTime = millis();
   state = STATE_READY;
   lcd.clear();
 }
@@ -297,7 +292,7 @@ void reportToWega() {
 }
 
 // Функции помп
-void PumpStart(int n) {
+void pumpStart(int n) {
   #if (RUSTY_MOTOR_KICK)
   mcp.digitalWrite(pinForward[n], LOW); 
   mcp.digitalWrite(pinReverse[n], HIGH);
@@ -306,11 +301,11 @@ void PumpStart(int n) {
   mcp.digitalWrite(pinForward[n], HIGH); 
   mcp.digitalWrite(pinReverse[n], LOW);
 }
-void PumpStop(int n) {
+void pumpStop(int n) {
   mcp.digitalWrite(pinForward[n], LOW); 
   mcp.digitalWrite(pinReverse[n], LOW);
 }
-void PumpReverse(int n) {
+void pumpReverse(int n) {
   mcp.digitalWrite(pinForward[n], LOW); 
   mcp.digitalWrite(pinReverse[n], HIGH);
 }
@@ -368,7 +363,7 @@ long pumpToValue(byte n, float capValue, float capMillis, float allowedOscillati
   unsigned long startMillis = millis();
   unsigned long stopMillis = startMillis + capMillis;
   float maxValue = value;
-  PumpStart(n);
+  pumpStart(n);
   char exitCode;
   for (long i = 0; true; i++) { 
     if (value >= capValue) {
@@ -389,7 +384,7 @@ long pumpToValue(byte n, float capValue, float capMillis, float allowedOscillati
       server.handleClient();
     }
   }
-  PumpStop(n);
+  pumpStop(n);
   printFunc(value);
   lcd.setCursor(15, 1);lcd.print(exitCode);
   return millis() - startMillis;
@@ -417,9 +412,9 @@ float pumping(int n) {
     preload = staticPreload[n];
 
     printProgress(F("Reverse"));
-    PumpReverse(n); wait(preload, 10); PumpStop(n);
+    pumpReverse(n); wait(preload, 10); pumpStop(n);
     printPreload(preload);
-    PumpStart(n); wait(preload, 10); PumpStop(n);
+    pumpStart(n); wait(preload, 10); pumpStop(n);
 
     curvol[n] = rawToUnits(readScalesWithCheck(128));
     server.handleClient();
@@ -457,7 +452,7 @@ float pumping(int n) {
   while (curvol[n] < goal[n] - 0.01) {
     printProgress(curvol[n], sk);
     
-    PumpStart(n); delay(sk); PumpStop(n);
+    pumpStart(n); delay(sk); pumpStop(n);
       
     float prevValue = curvol[n];
     curvol[n] = rawToUnits(readScalesWithCheck(128));
@@ -471,9 +466,9 @@ float pumping(int n) {
   printResult(curvol[n]);
 
   // реверс, высушить трубки
-  PumpReverse(n);
+  pumpReverse(n);
   wait(max(preload, staticPreload[n]) * 1.5, 10); 
-  PumpStop(n);
+  pumpStop(n);
 }
 
 void wait(unsigned long ms, int step) {
