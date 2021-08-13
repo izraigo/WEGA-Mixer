@@ -146,7 +146,7 @@ void loop() {
 }
 
 float truncNegativeZero (float x, byte precision) {
-  return x < 0 && -x < pow(0.1, precision)) ? 0 : x;
+  return x < 0 && -x < pow(0.1, precision) ? 0 : x;
 }
 
 void metaApi() {
@@ -308,6 +308,7 @@ void pumpReverse(int n) {
   mcp.digitalWrite(pinForward[n], LOW); 
   mcp.digitalWrite(pinReverse[n], HIGH);
 }
+
 // Функции вывода на экран
 // |1:Ca 34.45 Drops|
 void printStage(byte n, const __FlashStringHelper* stage) {
@@ -506,10 +507,6 @@ void tareScalesWithCheck(int times) {
 
 float rawToUnits(float raw) {
   return (raw - scale.get_offset()) / scale.get_scale();
-}
-
-float rawToUnits(float raw, float calibrationPoint) {
-  return (raw - scale.get_offset()) / calibrationPoint;
 }
 
 // функции для генерации json
