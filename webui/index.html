@@ -59,19 +59,18 @@ function loadStatus() {
             setTimeout(loadStatus, 1000); 
             return;
         }        
-        fromUrl &= !isWorking; 
-        if (!fromUrl) {
-            document.getElementById('sumA').textContent = r.sumA.toFixed(2);
-            document.getElementById('sumB').textContent = r.sumB.toFixed(2);
-            document.getElementById('timer').textContent = r.timer;
-            for (let i = 1; i <= 8; i++) {
-                let plannedVol = r.goal[i - 1];
+        document.getElementById('sumA').textContent = r.sumA.toFixed(2);
+        document.getElementById('sumB').textContent = r.sumB.toFixed(2);
+        document.getElementById('timer').textContent = new Date(r.timer * 1000).toISOString().substr(11, 8);
+        for (let i = 1; i <= 8; i++) {
+            let plannedVol = r.goal[i - 1];
+            if (!fromUrl) {
                 document.getElementsByName('p' + i)[0].value = plannedVol.toFixed(2);
-                let vol = r.result[i - 1];
-                let e = document.getElementById('r' + i);
-                e.textContent = vol ? '=' + vol.toFixed(2) + ' ' + (vol / plannedVol * 100 - 100).toFixed(2) + '%' : '';
-                e.style.fontWeight = r.pumpWorking == i ? 'bold' : 'normal'; 
             }
+            let vol = r.result[i - 1];
+            let e = document.getElementById('r' + i);
+            e.textContent = vol ? '=' + vol.toFixed(2) + ' ' + (vol / plannedVol * 100 - 100).toFixed(2) + '%' : '';
+            e.style.fontWeight = r.pumpWorking == i ? 'bold' : 'normal'; 
         }
         if (isReady) {
             document.getElementById('actions').hidden = false;

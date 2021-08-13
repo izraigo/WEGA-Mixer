@@ -472,7 +472,7 @@ float pumping(int n) {
 }
 
 void wait(unsigned long ms, int step) {
-  long endPreloadTime = millis() + ms; 
+  unsigned long endPreloadTime = millis() + ms; 
   while (millis() < endPreloadTime) {
     server.handleClient();
     delay(step);
