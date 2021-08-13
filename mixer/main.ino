@@ -214,7 +214,7 @@ void testApi(){
   okPage();
   for (byte i = 0; i < PUMPS_NO; i++) {
     printStage(i, F("Start")); pumpStart(i); delay(3000);
-    printStage(i, F("Revrs")); pumpReverse(i); delay(3000);
+    printStage(i, F("Revers")); pumpReverse(i); delay(3000);
     printStage(i, F("Stop"));  pumpStop(i); delay(1000);
   }
   state = STATE_READY;
