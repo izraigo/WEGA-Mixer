@@ -82,12 +82,11 @@ unsigned long sTime, eTime;
 
 ESP8266WebServer server(80);
 Adafruit_MCP23017 mcp;
-LiquidCrystal_I2C lcd(0x27, 16, 2); // Check I2C address of LCD, normally 0x27 or 0x3F
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Check I2C address of LCD, normally 0x27 or 0x3F // SDA = D1, SCL = D2
 HX711 scale;
 
 void setup() {
-  Wire.begin(D1, D2);
-  lcd.begin(D1, D2);      // SDA=D1, SCL=D2               
+  lcd.init(); 
   lcd.backlight();
 
   lcd.setCursor(0, 0);
@@ -326,14 +325,12 @@ void printProgress(const __FlashStringHelper* progress) {
 void printProgressValueOnly(float value) {
   lcd.setCursor(0, 1);
   lcd.printf_P(PSTR("%5.2f           "), truncNegativeZero(value, 2)); 
-  yield();
 }
 
 // | 3.14 80%       |
 void printProgress(float value) {
   lcd.setCursor(0, 1);
   lcd.printf_P(PSTR("%5.2f %.0f%%      "), value, value / goal[pumpWorking] * 100); 
-  yield();
 }
 
 // | 3.14 80% 80ms  |
@@ -354,12 +351,10 @@ void printPreload(int ms) {
   lcd.printf_P(PSTR("Preload=%dms    "), ms);
 }
 
-
 long pumpToValue(byte n, float capValue, float capMillis, float allowedOscillation, void (*printFunc)(float)) {
   float value = rawToUnits(filter.getEstimation());
-  if (value >= capValue) {
-    return 0;
-  }
+  if (value >= capValue) return 0;
+  
   unsigned long startMillis = millis();
   unsigned long stopMillis = startMillis + capMillis;
   float maxValue = value;
@@ -381,6 +376,7 @@ long pumpToValue(byte n, float capValue, float capMillis, float allowedOscillati
     maxValue = max(value, maxValue);
     if (i % 16 == 0) {
       printFunc(value);
+      yield();
       server.handleClient();
     }
   }
@@ -428,12 +424,12 @@ float pumping(int n) {
     wait(2000, 10);
   }
   
-  // до конечного веса минус 0.2 - 0.5 грамм по половине от остатка 
+  // быстрая фаза до конечного веса минус 0.2 - 0.5 грамм по половине от остатка 
   printStage(n, F("Fast"));
-  float performance = 0.0007;                                 // производительность грамм/мс при 12v и трубке 2x4
-  float dropTreshold = goal[n] - curvol[n] > 1.0 ? 0.2 : 0.5; // определяет сколько оставить на капельный налив
+  float performance = 0.0007;                                 // производительность грамм/мс при 12v и трубке 2x4, в процессе уточняется
+  float dropTreshold = goal[n] - curvol[n] > 1.0 ? 0.2 : 0.5; // определяет сколько оставить на капельный налив. Чем больше итераций тем точнее и можно лить почти до конца
   float valueToPump = goal[n] - curvol[n] - dropTreshold;
-  float allowedOscillation = valueToPump < 1.0 ? 1.5 : 3.0;  // допустимое раскачивание, чтобы остановитmся при помехах/раскачивании, важно на малых объемах  
+  float allowedOscillation = valueToPump < 1.0 ? 1.5 : 3.0;  // допустимое раскачивание, чтобы остановиться при помехах/раскачивании, важно на малых объемах  
   if (valueToPump > 0.3) { // если быстро качать не много то не начинать даже
     while ((valueToPump = goal[n] - curvol[n] - dropTreshold) > 0) {
       if (valueToPump > 0.2) valueToPump = valueToPump / 2;  // качать по половине от остатка
@@ -463,9 +459,9 @@ float pumping(int n) {
     server.handleClient();
   }
 
-  printResult(curvol[n]);
-
   // реверс, высушить трубки
+  printStage(n, F("Dry"));
+  printResult(curvol[n]);
   pumpReverse(n);
   wait(max(preload, staticPreload[n]) * 1.5, 10); 
   pumpStop(n);
