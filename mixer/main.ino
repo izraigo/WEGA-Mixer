@@ -153,10 +153,10 @@ void metaApi() {
   String message((char*)0);
   message.reserve(255);
   message += F("{\n");
-  append(message,    F("version"),     FPSTR(FW_version),         true,  false);
-  append(message,    F("scalePointA"), scale_calibration_A,       false, false);
-  append(message,    F("scalePointB"), scale_calibration_B,       false, false);  
-  appendArr(message, F("names"),       names,                     true,  true);  
+  appendJson(message,    F("version"),     FPSTR(FW_version),         true,  false);
+  appendJson(message,    F("scalePointA"), scale_calibration_A,       false, false);
+  appendJson(message,    F("scalePointB"), scale_calibration_B,       false, false);  
+  appendJsonArr(message, F("names"),       names,                     true,  true);  
   message += '}'; 
   server.send(200, "application/json", message);
 }
@@ -171,9 +171,9 @@ void scalesApi() {
   String message((char*)0);
   message.reserve(255);
   message += F("{\n");
-  append(message, F("value"),    rawToUnits(rawValue),  false, false);
-  append(message, F("rawValue"), rawValue,              false, false);
-  append(message, F("rawZero"),  scale.get_offset(),    false, true);
+  appendJson(message, F("value"),    rawToUnits(rawValue),  false, false);
+  appendJson(message, F("rawValue"), rawValue,              false, false);
+  appendJson(message, F("rawZero"),  scale.get_offset(),    false, true);
   message += '}';
   server.send(200, "application/json", message);
 } 
@@ -183,13 +183,13 @@ void statusApi() {
   String message((char*)0);
   message.reserve(512);
   message += F("{\n");
-  append(message,    F("state"),  stateStr[state],   true,  false);
-  append(message,    F("timer"),  ms / 1000,         false, false);
-  append(message,    F("sumA"),   sumA,              false, false);
-  append(message,    F("sumB"),   sumB,              false, false);
-  append(message,    F("pumpWorking"), pumpWorking,  false, false); 
-  appendArr(message, F("goal"),   goal,              false, false);
-  appendArr(message, F("result"), curvol,            false, true);
+  appendJson(message,    F("state"),  stateStr[state],   true,  false);
+  appendJson(message,    F("timer"),  ms / 1000,         false, false);
+  appendJson(message,    F("sumA"),   sumA,              false, false);
+  appendJson(message,    F("sumB"),   sumB,              false, false);
+  appendJson(message,    F("pumpWorking"), pumpWorking,  false, false); 
+  appendJsonArr(message, F("goal"),   goal,              false, false);
+  appendJsonArr(message, F("result"), curvol,            false, true);
   message += '}';
   server.send(200, "application/json", message);  
 }
@@ -277,11 +277,11 @@ void reportToWega() {
     httpstr += F("&p");
     httpstr += (i + 1);
     httpstr += '=';
-    httpstr += String(curvol[i], 3);
+    append(httpstr, curvol[i]);
     httpstr += F("&v");
     httpstr += (i + 1);
     httpstr += '=';
-    httpstr += String(goal[i], 3);
+    append(httpstr, goal[i]);
   } 
   WiFiClient client;
   HTTPClient http;
@@ -511,26 +511,39 @@ float rawToUnits(float raw) {
 
 // функции для генерации json
 template<typename T>
-void append(String& src, const __FlashStringHelper* name, const T& value, const bool quote, const bool last) {
+void appendJson(String& src, const __FlashStringHelper* name, const T& value, const bool quote, const bool last) {
   src += '"'; src += name; src += F("\":");
   if (quote) src += '"';
-  src += value;
+  append(src, value);
   if (quote) src += '"';
   if (!last) src += ',';  
   src += '\n';
 }
 
 template<typename T>
-void appendArr(String& src, const __FlashStringHelper* name, const T value[PUMPS_NO], const bool quote, const bool last) {
+void appendJsonArr(String& src, const __FlashStringHelper* name, const T value[PUMPS_NO], const bool quote, const bool last) {
   src += '"'; src += name; src += F("\":");
   src += '[';
   for (int i = 0; i < PUMPS_NO; i++) {
     if (quote) src += '"';
-    src += value[i];
+    append(src, value[i]);
     if (quote) src += '"';
     if (i < (PUMPS_NO - 1)) src += ',';
   }
   src += ']';
   if (!last) src += ',';  
   src += '\n';
+}
+
+template<typename T>
+void append(String& ret, const T& value) {
+  ret += value;  
+}
+template <>
+void append<float>(String& ret, const float& value) {
+  ret += (long)value;
+  ret += '.';
+  int n = ((long)(value * 1000 + 0.5)) % 1000;
+  while (n != 0 && n % 10 == 0) n = n / 10;
+  ret += abs(n);  
 }
