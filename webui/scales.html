@@ -26,7 +26,7 @@ function loadValue() {
     })
     .catch(e => {
         document.getElementById("value").textContent = e;
-        setTimeout(loadValue, 1000)
+        setTimeout(loadValue, 10000)
     });
 }
 

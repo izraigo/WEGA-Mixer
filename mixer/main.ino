@@ -138,15 +138,8 @@ void loop() {
   server.handleClient();
   ArduinoOTA.handle();
   readScales(16);
-  lcd.setCursor(0, 1);
-  lcd.print(truncNegativeZero(rawToUnits(displayFilter.getEstimation()), 2), 2);
-  lcd.print(F("         "));
-  lcd.setCursor(10, 0);
-  lcd.print(stateStr[state]); 
-}
-
-float truncNegativeZero (float x, byte precision) {
-  return x < 0 && -x < pow(0.1, precision) ? 0 : x;
+  printStatus(stateStr[state]); 
+  printProgressValueOnly(displayFilter.getEstimation());
 }
 
 void metaApi() {
@@ -316,6 +309,12 @@ void printStage(byte n, const __FlashStringHelper* stage) {
   lcd.printf_P(PSTR("%4s %.2f %S     "), names[n], goal[n], stage); 
 }
 
+// |          Ready |
+void printStatus(const char* status) {
+  lcd.setCursor(0, 0);
+  lcd.printf("%15s ", status); 
+}
+
 // | Skip           |
 void printProgress(const __FlashStringHelper* progress) {
   lcd.setCursor(0, 1);
@@ -325,7 +324,11 @@ void printProgress(const __FlashStringHelper* progress) {
 // | 3.14           |
 void printProgressValueOnly(float value) {
   lcd.setCursor(0, 1);
-  lcd.printf_P(PSTR("%5.2f           "), truncNegativeZero(value, 2)); 
+  lcd.printf_P(PSTR("%5.2f           "), truncNegativeZero(value, -0.01)); 
+}
+
+float truncNegativeZero (float x, float treshold) {
+  return x < 0 && x > treshold ? 0 : x;
 }
 
 // | 3.14 80%       |

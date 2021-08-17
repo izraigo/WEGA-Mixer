@@ -1,6 +1,6 @@
 {
 "version": "2.0.1 igor",
-"scalePointA": 1988,
-"scalePointB": 2020,
+"scalePointA": 1988.222,
+"scalePointB": 2020.444,
 "names": ["1:Ca", "2:NK", "3:NH", "4:Mg", "5:KP", "6:KS", "7:MK", "8:B"]
 }
