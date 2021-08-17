@@ -149,7 +149,7 @@ void metaApi() {
   appendJson(message,    F("version"),     FPSTR(FW_version),         true,  false);
   appendJson(message,    F("scalePointA"), scale_calibration_A,       false, false);
   appendJson(message,    F("scalePointB"), scale_calibration_B,       false, false);  
-  appendJsonArr(message, F("names"),       names,                     true,  true);  
+  appendJsonArr(message, F("names"),       names, PUMPS_NO,           true,  true);  
   message += '}'; 
   server.send(200, "application/json", message);
 }
@@ -181,8 +181,8 @@ void statusApi() {
   appendJson(message,    F("sumA"),   sumA,              false, false);
   appendJson(message,    F("sumB"),   sumB,              false, false);
   appendJson(message,    F("pumpWorking"), pumpWorking,  false, false); 
-  appendJsonArr(message, F("goal"),   goal,              false, false);
-  appendJsonArr(message, F("result"), curvol,            false, true);
+  appendJsonArr(message, F("goal"),   goal,   PUMPS_NO,  false, false);
+  appendJsonArr(message, F("result"), curvol, PUMPS_NO,  false, true);
   message += '}';
   server.send(200, "application/json", message);  
 }
@@ -194,7 +194,7 @@ void tareApi(){
   }  
   state = STATE_BUSY;
   printStatus(stateStr[state]);
-  printProgress(F("Taring..."));
+  printProgress(F("Tareing"));
   tareScalesWithCheck(255);
   state = STATE_READY;
   okPage();
@@ -526,14 +526,14 @@ void appendJson(String& src, const __FlashStringHelper* name, const T& value, co
 }
 
 template<typename T>
-void appendJsonArr(String& src, const __FlashStringHelper* name, const T value[PUMPS_NO], const bool quote, const bool last) {
+void appendJsonArr(String& src, const __FlashStringHelper* name, const T value[], const int len, const bool quote, const bool last) {
   src += '"'; src += name; src += F("\":");
   src += '[';
-  for (int i = 0; i < PUMPS_NO; i++) {
+  for (int i = 0; i < len; i++) {
     if (quote) src += '"';
     append(src, value[i]);
     if (quote) src += '"';
-    if (i < (PUMPS_NO - 1)) src += ',';
+    if (i < (len - 1)) src += ',';
   }
   src += ']';
   if (!last) src += ',';  
