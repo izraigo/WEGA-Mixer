@@ -193,6 +193,8 @@ void tareApi(){
     return; 
   }  
   state = STATE_BUSY;
+  printStatus(stateStr[state]);
+  printProgress(F("Taring..."));
   tareScalesWithCheck(255);
   state = STATE_READY;
   okPage();
