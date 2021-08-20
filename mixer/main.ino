@@ -625,13 +625,13 @@ void sendEvent(const __FlashStringHelper* name, int bufSize, void (*appendPayloa
 }
 
 void ping() {
-  if (lastSentTime + 60000 > millis()) return;
+  if (lastSentTime + 10000 > millis()) return;
   lastSentTime = millis();
   if (!checkConnected()) return;
   
   for (byte i = 0; i < SSE_MAX_CHANNELS; i++) {
     if (subscription[i] && subscription[i].connected()) { 
-      subscription[i].print(F("event: ping\ndata: {}\n\n"));
+      subscription[i].print(F(": keepAlive\n\n"));
     }   
   }
 }
