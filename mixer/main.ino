@@ -145,6 +145,7 @@ void loop() {
   printProgressValueOnly(displayFilter.getEstimation());
   server.handleClient();
   ArduinoOTA.handle();
+  MDNS.update();
   if (lastSentTime + 1000 < millis()) sendScalesValue();
 }
 
@@ -158,15 +159,15 @@ void handleSubscribe() {
     if (!subscription[i] || subscription[i].status() == CLOSED) {
       server.client().setNoDelay(true);
       server.client().setSync(true);
-      server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+      subscription[i] = server.client();
       
+      server.setContentLength(CONTENT_LENGTH_UNKNOWN);
       server.sendContent_P(PSTR("HTTP/1.1 200 OK\n"
         "Content-Type: text/event-stream;\n" 
         "Connection: keep-alive\n" 
         "Cache-Control: no-cache\n" 
         "Access-Control-Allow-Origin: *\n\n"));
 
-      subscription[i] = server.client();
       sendReportUpdate();
       sendState();
       return;
@@ -177,7 +178,7 @@ void handleSubscribe() {
 
 void sendScalesValue() {
   sendEvent(F("scales"), 256, [] (String& message) {
-    appendJson(message, F("weight"), rawToUnits(displayFilter.getEstimation()),  false, false);  
+    appendJson(message, F("value"), rawToUnits(displayFilter.getEstimation()),  false, true);  
   }); 
 }
 
