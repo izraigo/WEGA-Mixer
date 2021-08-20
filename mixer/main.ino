@@ -108,6 +108,7 @@ void setup() {
   MDNS.begin("mixer");
   MDNS.addService("http", "tcp", 80);
   server.on("/rest/events",  handleSubscribe);
+  server.on("/rest/meta",    handleMeta);
   server.on("/rest/start",   handleStart);
   server.on("/rest/tare",    handleTare);
   server.on("/rest/measure", handleMeasure);  
@@ -147,6 +148,11 @@ void loop() {
   if (lastSentTime + 1000 < millis()) sendScalesValue();
 }
 
+void setState(State s){
+  state = s;
+  sendState();
+}
+
 void handleSubscribe() {
   for (int i = 0; i < SSE_MAX_CHANNELS; i++) {
     if (!subscription[i] || subscription[i].status() == CLOSED) {
@@ -161,7 +167,6 @@ void handleSubscribe() {
         "Access-Control-Allow-Origin: *\n\n"));
 
       subscription[i] = server.client();
-      sendMeta();
       sendReportUpdate();
       sendState();
       return;
@@ -170,24 +175,10 @@ void handleSubscribe() {
   return busyPage();
 }
 
-void sendMeta() {
-  sendEvent(F("meta"), 256, [] (String& message) {
-    appendJson(message,    F("version"),     FPSTR(FW_version),         true,  false);
-    appendJson(message,    F("scalePointA"), scale_calibration_A,       false, false);
-    appendJson(message,    F("scalePointB"), scale_calibration_B,       false, false);  
-    appendJsonArr(message, F("names"),       names, PUMPS_NO,           true,  true);  
-  });   
-}
-
 void sendScalesValue() {
   sendEvent(F("scales"), 256, [] (String& message) {
     appendJson(message, F("weight"), rawToUnits(displayFilter.getEstimation()),  false, false);  
   }); 
-}
-
-void setState(State s){
-  state = s;
-  sendState();
 }
 
 void sendState() {
@@ -208,6 +199,18 @@ void sendReportUpdate() {
   });  
 }
 
+void handleMeta() {
+  String message((char*)0);
+  message.reserve(255);
+  message += '{';
+  appendJson(message,    F("version"),     FPSTR(FW_version),         true,  false);
+  appendJson(message,    F("scalePointA"), scale_calibration_A,       false, false);
+  appendJson(message,    F("scalePointB"), scale_calibration_B,       false, false);  
+  appendJsonArr(message, F("names"),       names, PUMPS_NO,           true,  true);  
+  message += '}';
+  server.send(200, "application/json", message);
+}
+
 void handleMeasure() {
   if (state != STATE_READY) return busyPage(); 
   
@@ -215,7 +218,7 @@ void handleMeasure() {
   float rawValue = readScalesWithCheck(128);
   String message((char*)0);
   message.reserve(255);
-  message += F("{\n");
+  message += '{';
   appendJson(message, F("value"),    rawToUnits(rawValue),  false, false);
   appendJson(message, F("rawValue"), rawValue,              false, false);
   appendJson(message, F("rawZero"),  scale.get_offset(),    false, true);
@@ -562,7 +565,6 @@ void appendJson(String& src, const __FlashStringHelper* name, const T& value, co
   append(src, value);
   if (quote) src += '"';
   if (!last) src += ',';  
-  src += '\n';
 }
 
 template<typename T>
@@ -577,7 +579,6 @@ void appendJsonArr(String& src, const __FlashStringHelper* name, const T value[]
   }
   src += ']';
   if (!last) src += ',';  
-  src += '\n';
 }
 
 template<typename T>
