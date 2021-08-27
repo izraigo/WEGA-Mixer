@@ -5,7 +5,7 @@ Status: <span id='state'>Ready</span><br>
 <br>Sum A = <span id='sumA'></span>
 <br>Sum B = <span id='sumB'></span>
 <br>Timer = <span id='timer'></span>
-<form action="api/action/start">
+<form action="/rest/start">
     <p>P1 = <input type='text' name='g1'/> <span id='n1'></span><span id='r1'/></p>
     <p>P2 = <input type='text' name='g2'/> <span id='n2'></span><span id='r2'/></p>
     <p>P3 = <input type='text' name='g3'/> <span id='n3'></span><span id='r3'/></p>    
@@ -23,7 +23,7 @@ Status: <span id='state'>Ready</span><br>
 ver : <span id='version'>unknown</span>
 <script>
 function loadMeta() {
-    fetch('/api/meta').then(r => r.json()).then(r => {
+    fetch('/rest/meta').then(r => r.json()).then(r => {
         let params = new URLSearchParams(location.search);
         document.getElementById('version').textContent = r.version;
         for (let i = 1; i <= r.names.length; i++) {
@@ -43,7 +43,7 @@ function loadMeta() {
 
 function onStateUpdate(event) {
     document.getElementById('state').textContent = event.state;
-    document.getElementById('actions').hidden = event.state == "Ready";
+    document.getElementById('actions').hidden = event.state != "Ready";
 }
 
 function onScalesUpdate(event) {
@@ -55,19 +55,20 @@ function onReportUpdate(event) {
     document.getElementById('sumA').textContent = event.sumA.toFixed(2);
     document.getElementById('sumB').textContent = event.sumB.toFixed(2);
     document.getElementById('timer').textContent = new Date(event.timer * 1000).toISOString().substr(11, 8);
-    for (let i = 1; i <= events.goal.length; i++) {
+    for (let i = 1; i <= event.goal.length; i++) {
         let goal = event.goal[i - 1];
         if (!goalIsSet) {
             document.getElementsByName('g' + i)[0].value = goal.toFixed(2);
             goalIsSet = true;
         }
-        let vol = r.result[i - 1];
+        let vol = event.result[i - 1];
         let e = document.getElementById('r' + i);
         e.textContent = vol ? '=' + vol.toFixed(2) + ' ' + (vol / goal * 100 - 100).toFixed(2) + '%' : '';
         e.style.fontWeight = event.pumpWorking == i ? 'bold' : 'normal'; 
     }
 }
 
+goalIsSet = false;
 loadMeta();
 
 </script>   

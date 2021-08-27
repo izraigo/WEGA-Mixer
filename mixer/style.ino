@@ -5,20 +5,21 @@ const char CSS_page[] PROGMEM = R"=====(
 const char MAIN_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <link rel='stylesheet' type='text/css' href='style.css'>
-Status: <span id='state'></span><br>
+Status: <span id='state'>Ready</span><br>
+<br><span id='weight'>00.01</span><br>
 <br>Sum A = <span id='sumA'></span>
 <br>Sum B = <span id='sumB'></span>
 <br>Timer = <span id='timer'></span>
-<form action="api/action/start">
-    <p>P1 = <input type='text' name='p1'/> <span id='n1'></span><span id='r1'/></p>
-    <p>P2 = <input type='text' name='p2'/> <span id='n2'></span><span id='r2'/></p>
-    <p>P3 = <input type='text' name='p3'/> <span id='n3'></span><span id='r3'/></p>    
-    <p>P4 = <input type='text' name='p4'/> <span id='n4'></span><span id='r4'/></p>
-    <p>P5 = <input type='text' name='p5'/> <span id='n5'></span><span id='r5'/></p>    
-    <p>P6 = <input type='text' name='p6'/> <span id='n6'></span><span id='r6'/></p>
-    <p>P7 = <input type='text' name='p7'/> <span id='n7'></span><span id='r7'/></p>    
-    <p>P8 = <input type='text' name='p8'/> <span id='n8'></span><span id='r8'/></p>
-    <p id='actions' hidden='true'>
+<form action="/rest/start">
+    <p>P1 = <input type='text' name='g1'/> <span id='n1'></span><span id='r1'/></p>
+    <p>P2 = <input type='text' name='g2'/> <span id='n2'></span><span id='r2'/></p>
+    <p>P3 = <input type='text' name='g3'/> <span id='n3'></span><span id='r3'/></p>    
+    <p>P4 = <input type='text' name='g4'/> <span id='n4'></span><span id='r4'/></p>
+    <p>P5 = <input type='text' name='g5'/> <span id='n5'></span><span id='r5'/></p>    
+    <p>P6 = <input type='text' name='g6'/> <span id='n6'></span><span id='r6'/></p>
+    <p>P7 = <input type='text' name='g7'/> <span id='n7'></span><span id='r7'/></p>    
+    <p>P8 = <input type='text' name='g8'/> <span id='n8'></span><span id='r8'/></p>
+    <p id='actions' >
         <input type='submit' value='Start'/>
         <input type='button' onclick='location.href = "scales";' value='Scales'/>
         <input type='button' onclick='location.href = "calibration";' value='Calibration'/>
@@ -27,70 +28,54 @@ Status: <span id='state'></span><br>
 ver : <span id='version'>unknown</span>
 <script>
 function loadMeta() {
-    fetch('/api/meta').then(r => r.json()).then(r => {
+    fetch('/rest/meta').then(r => r.json()).then(r => {
+        let params = new URLSearchParams(location.search);
         document.getElementById('version').textContent = r.version;
-        for (let i = 1; i <= 8; i++) {
+        for (let i = 1; i <= r.names.length; i++) {
             document.getElementById('n' + i).textContent = r.names[i - 1];
-        }
-    })
-    .catch(e => setTimeout(loadMeta, 5000));
-}
-
-function takeFromUrl() {
-    let completed = false;
-    let params = new URLSearchParams(location.search);
-    for (let i = 1; i <= 8; i++) {
-        let plan = params.get("p" + i);
-        if (plan) {
-            document.getElementsByName('p' + i)[0].value = parseFloat(plan).toFixed(2);
-            completed = true;
-        }
-    }
-    return completed;
-}
-
-function loadStatus() {
-    fetch('/api/status')
-    .then(r => {
-        if (r.ok) return r.json();
-        throw new Error('Retry');
-    })
-    .then(r => {
-        document.getElementById('state').textContent = r.state;
-        let isReady = r.state == "Ready";
-        let isBusy = r.state == "Busy";
-        let isWorking = r.state == "Working";
-        if (isBusy) { 
-            setTimeout(loadStatus, 1000); 
-            return;
-        }        
-        document.getElementById('sumA').textContent = r.sumA.toFixed(2);
-        document.getElementById('sumB').textContent = r.sumB.toFixed(2);
-        document.getElementById('timer').textContent = new Date(r.timer * 1000).toISOString().substr(11, 8);
-        for (let i = 1; i <= 8; i++) {
-            let plannedVol = r.goal[i - 1];
-            if (!fromUrl) {
-                document.getElementsByName('p' + i)[0].value = plannedVol.toFixed(2);
+            let goal = params.get("p" + i);
+            if (goal) {
+                document.getElementsByName('g' + i)[0].value = goal;
+                goalIsSet = true;
             }
-            let vol = r.result[i - 1];
-            let e = document.getElementById('r' + i);
-            e.textContent = vol ? '=' + vol.toFixed(2) + ' ' + (vol / plannedVol * 100 - 100).toFixed(2) + '%' : '';
-            e.style.fontWeight = r.pumpWorking == i - 1 ? 'bold' : 'normal'; 
         }
-       
-        if (isReady) {
-            document.getElementById('actions').hidden = false;
-        } else {
-            document.getElementById('actions').hidden = true;                        
-            setTimeout(loadStatus, 5000);
-        }
-    })
-    .catch(e => setTimeout(loadStatus, 5000));
+        const evtSource = new EventSource("/rest/events");
+        evtSource.addEventListener("state",  event => onStateUpdate(JSON.parse(event.data)));
+        evtSource.addEventListener("scales", event => onScalesUpdate(JSON.parse(event.data)));
+        evtSource.addEventListener("report", event => onReportUpdate(JSON.parse(event.data)));
+    }).catch(e => setTimeout(loadMeta, 5000));
 }
 
+function onStateUpdate(event) {
+    document.getElementById('state').textContent = event.state;
+    document.getElementById('actions').hidden = event.state != "Ready";
+}
+
+function onScalesUpdate(event) {
+    document.getElementById('weight').textContent = event.value;
+}
+
+function onReportUpdate(event) {
+    document.getElementById('weight').textContent = "";
+    document.getElementById('sumA').textContent = event.sumA.toFixed(2);
+    document.getElementById('sumB').textContent = event.sumB.toFixed(2);
+    document.getElementById('timer').textContent = new Date(event.timer * 1000).toISOString().substr(11, 8);
+    for (let i = 1; i <= event.goal.length; i++) {
+        let goal = event.goal[i - 1];
+        if (!goalIsSet) {
+            document.getElementsByName('g' + i)[0].value = goal.toFixed(2);
+            goalIsSet = true;
+        }
+        let vol = event.result[i - 1];
+        let e = document.getElementById('r' + i);
+        e.textContent = vol ? '=' + vol.toFixed(2) + ' ' + (vol / goal * 100 - 100).toFixed(2) + '%' : '';
+        e.style.fontWeight = event.pumpWorking == i ? 'bold' : 'normal'; 
+    }
+}
+
+goalIsSet = false;
 loadMeta();
-fromUrl = takeFromUrl();
-loadStatus();
+
 </script>   
 )=====";
 
