@@ -85,12 +85,19 @@ Adafruit_MCP23017 mcp;
 LiquidCrystal_I2C lcd(0x27, 16, 2); // Check I2C address of LCD, normally 0x27 or 0x3F // SDA = D1, SCL = D2
 HX711 scale;
 
+#define SSE_MAX_CHANNELS 8
+WiFiClient subscription[SSE_MAX_CHANNELS];
+unsigned long lastSentTime = 0;
+
+void setState(State s);
+
 void setup() {
+  Wire.begin(D1, D2);
   lcd.init(); 
   lcd.backlight();
 
   lcd.setCursor(0, 0);
-  lcd.print(F("Start FW: "));
+  lcd.print(F("ver: "));
   lcd.print(FPSTR(FW_version));
 
   WiFi.mode(WIFI_STA);
@@ -101,16 +108,15 @@ void setup() {
 
   MDNS.begin("mixer");
   MDNS.addService("http", "tcp", 80);
-  server.on("/api/meta", metaApi);
-  server.on("/api/status", statusApi);
-  server.on("/api/scales", scalesApi);
-  server.on("/api/action/start", startApi);
-  server.on("/api/action/tare", tareApi);
-  server.on("/api/action/test", testApi);
-  server.on("/", mainPage);
-  server.on("/scales", scalesPage);
-  server.on("/calibration", calibrationPage);
-  server.on("/style.css", cssPage);
+  server.on("/rest/events",  handleSubscribe);
+  server.on("/rest/meta",    handleMeta);
+  server.on("/rest/start",   handleStart);
+  server.on("/rest/tare",    handleTare);
+  server.on("/rest/measure", handleMeasure);  
+  server.on("/rest/test",    handleTest);
+  server.on("/",             mainPage);
+  server.on("/calibration",  calibrationPage);
+  server.on("/style.css",    cssPage);
   server.begin();
   ArduinoOTA.onStart([]() {});
   ArduinoOTA.onEnd([]() {});
@@ -131,96 +137,126 @@ void setup() {
   tareScalesWithCheck(255);  
   
   lcd.clear();
-  state = STATE_READY;
+  setState(STATE_READY);
 }
 
 void loop() {
-  server.handleClient();
-  ArduinoOTA.handle();
   readScales(16);
   printStatus(stateStr[state]); 
-  printProgressValueOnly(displayFilter.getEstimation());
+  printProgressValueOnly(rawToUnits(displayFilter.getEstimation()));
+  server.handleClient();
+  ArduinoOTA.handle();
+  MDNS.update();
+  if (lastSentTime + 1000 < millis()) sendScalesValue();
 }
 
-void metaApi() {
+void setState(State s){
+  state = s;
+  sendState();
+}
+
+void handleSubscribe() {
+  for (int i = 0; i < SSE_MAX_CHANNELS; i++) {
+    if (!subscription[i] || subscription[i].status() == CLOSED) {
+      server.client().setNoDelay(true);
+      server.client().setSync(true);
+      subscription[i] = server.client();
+      
+      server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+      server.sendContent_P(PSTR("HTTP/1.1 200 OK\n"
+        "Content-Type: text/event-stream;\n" 
+        "Connection: keep-alive\n" 
+        "Cache-Control: no-cache\n" 
+        "Access-Control-Allow-Origin: *\n\n"));
+
+      sendReportUpdate();
+      sendState();
+      return;
+    }
+  }
+  return busyPage();
+}
+
+void sendScalesValue() {
+  sendEvent(F("scales"), 256, [] (String& message) {
+    appendJson(message, F("value"), rawToUnits(displayFilter.getEstimation()),  false, true);  
+  }); 
+}
+
+void sendState() {
+  sendEvent(F("state"), 256, [] (String& message) {
+    appendJson(message, F("state"), stateStr[state],  true, true);  
+  }); 
+}
+
+void sendReportUpdate() {
+  sendEvent(F("report"), 512, [] (String& message) {
+    unsigned long ms = sTime == 0 ? 0 : (eTime == 0 ? millis() - sTime : eTime - sTime);  
+    appendJson(message,    F("timer"),  ms / 1000,         false, false);
+    appendJson(message,    F("sumA"),   sumA,              false, false);
+    appendJson(message,    F("sumB"),   sumB,              false, false);
+    appendJson(message,    F("pumpWorking"), pumpWorking,  false, false); 
+    appendJsonArr(message, F("goal"),   goal,   PUMPS_NO,  false, false);
+    appendJsonArr(message, F("result"), curvol, PUMPS_NO,  false, true);
+  });  
+}
+
+void handleMeta() {
   String message((char*)0);
   message.reserve(255);
-  message += F("{\n");
+  message += '{';
   appendJson(message,    F("version"),     FPSTR(FW_version),         true,  false);
   appendJson(message,    F("scalePointA"), scale_calibration_A,       false, false);
   appendJson(message,    F("scalePointB"), scale_calibration_B,       false, false);  
   appendJsonArr(message, F("names"),       names, PUMPS_NO,           true,  true);  
-  message += '}'; 
+  message += '}';
   server.send(200, "application/json", message);
 }
 
-void scalesApi() {
-  if (state != STATE_READY) {
-    busyPage(); 
-    return; 
-  }
+void handleMeasure() {
+  if (state != STATE_READY) return busyPage(); 
   
-  float rawValue = displayFilter.getEstimation();
+  setState(STATE_BUSY);    
+  float rawValue = readScalesWithCheck(128);
   String message((char*)0);
   message.reserve(255);
-  message += F("{\n");
+  message += '{';
   appendJson(message, F("value"),    rawToUnits(rawValue),  false, false);
   appendJson(message, F("rawValue"), rawValue,              false, false);
   appendJson(message, F("rawZero"),  scale.get_offset(),    false, true);
   message += '}';
   server.send(200, "application/json", message);
+  setState(STATE_READY);
 } 
 
-void statusApi() {
-  unsigned long ms = sTime == 0 ? 0 : (eTime == 0 ? millis() - sTime : eTime - sTime);  
-  String message((char*)0);
-  message.reserve(512);
-  message += F("{\n");
-  appendJson(message,    F("state"),  stateStr[state],   true,  false);
-  appendJson(message,    F("timer"),  ms / 1000,         false, false);
-  appendJson(message,    F("sumA"),   sumA,              false, false);
-  appendJson(message,    F("sumB"),   sumB,              false, false);
-  appendJson(message,    F("pumpWorking"), pumpWorking,  false, false); 
-  appendJsonArr(message, F("goal"),   goal,   PUMPS_NO,  false, false);
-  appendJsonArr(message, F("result"), curvol, PUMPS_NO,  false, true);
-  message += '}';
-  server.send(200, "application/json", message);  
-}
+void handleTare(){
+  if (state != STATE_READY) return busyPage(); 
 
-void tareApi(){
-  if (state != STATE_READY) { 
-    busyPage(); 
-    return; 
-  }  
-  state = STATE_BUSY;
+  setState(STATE_BUSY);
   printStatus(stateStr[state]);
-  printProgress(F("Tareing"));
+  printProgress(F("Taring"));
   tareScalesWithCheck(255);
-  state = STATE_READY;
+  setState(STATE_READY);
   okPage();
 }
 
-void testApi(){
-  if (state != STATE_READY) { 
-    busyPage(); 
-    return; 
-  }  
-  state = STATE_BUSY;
+void handleTest(){
+  if (state != STATE_READY) return busyPage(); 
+
+  setState(STATE_BUSY);
   okPage();
   for (byte i = 0; i < PUMPS_NO; i++) {
     printStage(i, F("Start")); pumpStart(i); delay(3000);
     printStage(i, F("Revers")); pumpReverse(i); delay(3000);
     printStage(i, F("Stop"));  pumpStop(i); delay(1000);
   }
-  state = STATE_READY;
+  setState(STATE_READY);
 }
 
-void startApi() {
-  if (state != STATE_READY) { 
-    busyPage(); 
-    return; 
-  }
-  state = STATE_WORKING;  
+void handleStart() {
+  if (state != STATE_READY) return busyPage(); 
+  
+  setState(STATE_WORKING);  
   sTime = millis();
   eTime = 0;
   sumA = 0;
@@ -259,7 +295,8 @@ void startApi() {
   scale.set_offset(offsetBeforePump);
 
   eTime = millis();
-  state = STATE_READY;
+  sendReportUpdate();
+  setState(STATE_READY);
   lcd.clear();
 }
 
@@ -384,6 +421,7 @@ long pumpToValue(byte n, float capValue, float capMillis, float allowedOscillati
       printFunc(value);
       yield();
       server.handleClient();
+      ping();
     }
   }
   pumpStop(n);
@@ -396,6 +434,7 @@ long pumpToValue(byte n, float capValue, float capMillis, float allowedOscillati
 float pumping(int n) {
   pumpWorking = n;
   server.handleClient();
+  sendReportUpdate();
 
   if (goal[n] <= 0) {
     printStage(n, F("Skip"));
@@ -420,11 +459,13 @@ float pumping(int n) {
 
     curvol[n] = rawToUnits(readScalesWithCheck(128));
     server.handleClient();
+    sendReportUpdate();
   } else { // прелоад до первой капли
     while (curvol[n] < 0.02) {
       preload += pumpToValue(n, 0.03, staticPreload[n] * 2, 0.1, printProgressValueOnly);
       curvol[n] = rawToUnits(readScalesWithCheck(128));
       server.handleClient();
+      sendReportUpdate();
     }
     printPreload(preload);
     wait(2000, 10);
@@ -445,6 +486,7 @@ float pumping(int n) {
       curvol[n] = rawToUnits(readScalesWithCheck(128));
       if (workedTime > 200 && curvol[n] - prevValue > 0.15) performance = max(performance, (curvol[n] - prevValue) / workedTime);
       server.handleClient();
+      sendReportUpdate();
     }
   }
   
@@ -463,6 +505,7 @@ float pumping(int n) {
     if (curvol[n] - prevValue > 0.1 ) {sk = 0;}
     
     server.handleClient();
+    sendReportUpdate();
   }
 
   // реверс, высушить трубки
@@ -477,6 +520,7 @@ void wait(unsigned long ms, int step) {
   unsigned long endPreloadTime = millis() + ms; 
   while (millis() < endPreloadTime) {
     server.handleClient();
+    ping();
     delay(step);
   }
 }
@@ -497,6 +541,7 @@ float readScalesWithCheck(int times) {
   float value1 = readScales(times / 2);
   while (true) {
     server.handleClient();
+    ping();
     delay(20);
     float value2 = readScales(times / 2);
     if (fabs(value1 - value2) < fabs(0.01 * scale_calibration_A)) {
@@ -522,7 +567,6 @@ void appendJson(String& src, const __FlashStringHelper* name, const T& value, co
   append(src, value);
   if (quote) src += '"';
   if (!last) src += ',';  
-  src += '\n';
 }
 
 template<typename T>
@@ -537,7 +581,6 @@ void appendJsonArr(String& src, const __FlashStringHelper* name, const T value[]
   }
   src += ']';
   if (!last) src += ',';  
-  src += '\n';
 }
 
 template<typename T>
@@ -546,9 +589,58 @@ void append(String& ret, const T& value) {
 }
 template <>
 void append<float>(String& ret, const float& value) {
-  ret += (long)value;
+  if (value < 0) ret += '-';
+  float v = fabs(value);
+  ret += (long)v;
   ret += '.';
-  int n = ((long)(value * 1000 + 0.5)) % 1000;
+  int n = ((long)(v * 1000 + 0.5)) % 1000;
+  if (n != 0) {
+    if (abs(n) < 100) ret += '0';
+    if (abs(n) < 10) ret += '0';
+  }
   while (n != 0 && n % 10 == 0) n = n / 10;
   ret += abs(n);  
+}
+
+bool checkConnected() {
+  bool result = false;
+  for (uint8_t i = 0; i < SSE_MAX_CHANNELS; i++) {
+    if (!subscription[i] || subscription[i].status() == CLOSED) {
+      continue;
+    } else if (subscription[i].connected()) {
+      result = true;
+    } else {
+      subscription[i].flush();
+      subscription[i].stop();
+    }
+  }
+  return result;
+}
+
+void sendEvent(const __FlashStringHelper* name, int bufSize, void (*appendPayload)(String&)) {
+  if (!checkConnected()) return;
+  lastSentTime = millis();
+  String message((char*)0);
+  message.reserve(bufSize);
+  message += F("event:");
+  message += name;
+  message += F("\ndata:{");
+  appendPayload(message);
+  message += F("}\n\n");
+  
+  for (byte i = 0; i < SSE_MAX_CHANNELS; i++) {
+    if (subscription[i] && subscription[i].connected()) subscription[i].print(message); 
+  }
+}
+
+void ping() {
+  if (lastSentTime + 10000 > millis()) return;
+  lastSentTime = millis();
+  if (!checkConnected()) return;
+  
+  for (byte i = 0; i < SSE_MAX_CHANNELS; i++) {
+    if (subscription[i] && subscription[i].connected()) { 
+      subscription[i].print(F(": keepAlive\n\n"));
+    }   
+  }
 }
