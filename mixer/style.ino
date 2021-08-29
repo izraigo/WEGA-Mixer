@@ -5,27 +5,27 @@ const char CSS_page[] PROGMEM = R"=====(
 const char MAIN_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <link rel='stylesheet' type='text/css' href='style.css'>
-Status: <span id='state'>Ready</span><br>
-<br><span id='weight'>00.01</span><br>
+Status: <span id='state'></span><br>
+<br><span id='weight'></span><br>
 <br>Sum A = <span id='sumA'></span>
 <br>Sum B = <span id='sumB'></span>
 <br>Timer = <span id='timer'></span>
 <form action="/rest/start">
-    <p>P1 = <input type='text' name='g1'/> <span id='n1'></span><span id='r1'/></p>
-    <p>P2 = <input type='text' name='g2'/> <span id='n2'></span><span id='r2'/></p>
-    <p>P3 = <input type='text' name='g3'/> <span id='n3'></span><span id='r3'/></p>    
-    <p>P4 = <input type='text' name='g4'/> <span id='n4'></span><span id='r4'/></p>
-    <p>P5 = <input type='text' name='g5'/> <span id='n5'></span><span id='r5'/></p>    
-    <p>P6 = <input type='text' name='g6'/> <span id='n6'></span><span id='r6'/></p>
-    <p>P7 = <input type='text' name='g7'/> <span id='n7'></span><span id='r7'/></p>    
-    <p>P8 = <input type='text' name='g8'/> <span id='n8'></span><span id='r8'/></p>
-    <p id='actions' >
+    <p>P1 = <input type='text' name='p1'/> <span id='n1'></span><span id='r1'/></p>
+    <p>P2 = <input type='text' name='p2'/> <span id='n2'></span><span id='r2'/></p>
+    <p>P3 = <input type='text' name='p3'/> <span id='n3'></span><span id='r3'/></p>    
+    <p>P4 = <input type='text' name='p4'/> <span id='n4'></span><span id='r4'/></p>
+    <p>P5 = <input type='text' name='p5'/> <span id='n5'></span><span id='r5'/></p>    
+    <p>P6 = <input type='text' name='p6'/> <span id='n6'></span><span id='r6'/></p>
+    <p>P7 = <input type='text' name='p7'/> <span id='n7'></span><span id='r7'/></p>    
+    <p>P8 = <input type='text' name='p8'/> <span id='n8'></span><span id='r8'/></p>
+    <p id='actions'>
         <input type='submit' value='Start'/>
-        <input type='button' onclick='location.href = "scales";' value='Scales'/>
+        <input type='button' onclick="tare();" value='Tare'/>
         <input type='button' onclick='location.href = "calibration";' value='Calibration'/>
     </p>
 </form>
-ver : <span id='version'>unknown</span>
+ver : <span id='version'></span>
 <script>
 function loadMeta() {
     fetch('/rest/meta').then(r => r.json()).then(r => {
@@ -33,9 +33,9 @@ function loadMeta() {
         document.getElementById('version').textContent = r.version;
         for (let i = 1; i <= r.names.length; i++) {
             document.getElementById('n' + i).textContent = r.names[i - 1];
-            let goal = params.get("p" + i);
+            let goal = params.get('p' + i);
             if (goal) {
-                document.getElementsByName('g' + i)[0].value = goal;
+                document.getElementsByName('p' + i)[0].value = goal;
                 goalIsSet = true;
             }
         }
@@ -48,7 +48,7 @@ function loadMeta() {
 
 function onStateUpdate(event) {
     document.getElementById('state').textContent = event.state;
-    document.getElementById('actions').hidden = event.state != "Ready";
+    document.querySelectorAll("input").forEach(e => e.disabled = (event.state != "Ready"));
 }
 
 function onScalesUpdate(event) {
@@ -63,15 +63,26 @@ function onReportUpdate(event) {
     for (let i = 1; i <= event.goal.length; i++) {
         let goal = event.goal[i - 1];
         if (!goalIsSet) {
-            document.getElementsByName('g' + i)[0].value = goal.toFixed(2);
-            goalIsSet = true;
+            document.getElementsByName('p' + i)[0].value = goal.toFixed(2);
         }
         let vol = event.result[i - 1];
         let e = document.getElementById('r' + i);
         e.textContent = vol ? '=' + vol.toFixed(2) + ' ' + (vol / goal * 100 - 100).toFixed(2) + '%' : '';
-        e.style.fontWeight = event.pumpWorking == i ? 'bold' : 'normal'; 
+        e.style.fontWeight = event.pumpWorking == i - 1 ? 'bold' : 'normal'; 
+        document.getElementById('n' + i).style.fontWeight = event.pumpWorking == i - 1 ? 'bold' : 'normal'; 
     }
 }
+
+function tare() {
+    document.getElementById("weight").textContent = "Wait";
+    fetch("/rest/tare")
+    .then(r => {
+        if (r.ok) return document.getElementById("weight").textContent = "Ok";
+        throw new Error('Busy try later');
+    })
+    .catch(e => document.getElementById("weight").textContent = e);
+}
+
 
 goalIsSet = false;
 loadMeta();
@@ -79,50 +90,12 @@ loadMeta();
 </script>   
 )=====";
 
-const char SCALES_page[] PROGMEM = R"=====(
-<!DOCTYPE html>
-<link rel='stylesheet' type='text/css' href='style.css'/>
-<br>Value = <span id="value"></span>g
-<p>
-    <input type='button' onclick="fetch('/api/action/tare');" value='Set to ZERO'/>
-    <input type='button' onclick="location.href = '/';" value='Home'/>
-</p>
-ver : <span id="version">unknown</span>
-<script>
-function loadMeta() {
-    fetch("/api/meta").then(r => r.json()).then(r => {
-        document.getElementById("version").textContent = r.version;
-    })
-    .catch(e => setTimeout(loadMeta, 1000));
-}
-
-function loadValue() {
-    fetch("/api/scales")
-    .then(r => {
-        if (r.ok) return r.json();
-        throw new Error(r.status == 303 ? "Busy" : "Error " + status);
-    })
-    .then(r => {
-        document.getElementById("value").textContent = r.value.toFixed(2);
-        setTimeout(loadValue, 1000);
-    })
-    .catch(e => {
-        document.getElementById("value").textContent = e;
-        setTimeout(loadValue, 1000)
-    });
-}
-
-loadMeta();
-loadValue();
-</script>
-)=====";
-
 const char CALIBRATION_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <link rel='stylesheet' type='text/css' href='style.css'>
 Current scale_calibration_A=<span id="curA"></span>, scale_calibration_B=<span id="curB"></span>
 <ol>
-    <li>Unload scales. And press <input type='button' onclick="tare();" value='Set to ZERO'/> <b id='tareOk'></b></li>
+    <li>Unload scales and press <input type='button' onclick="tare();" value='Set to ZERO'/> <b id='tareOk'></b></li>
     <li>Take any object of known weight. Enter its weight here <input type='text' id='knownValue'/></li>
     <li>Place the weight on point A and press <input type='button' onclick="calc('A');" value="Ok"/> <b id='A'></b></li>
     <li>Place the weight on point B and press <input type='button' onclick="calc('B');"value="Ok"/> <b id='B'></b></li>
@@ -137,7 +110,7 @@ Test:
 ver : <span id='version'>unknown</span>    
 <script>
 function loadMeta() {
-    fetch("/api/meta").then(r => r.json()).then(r => {
+    fetch("/rest/meta").then(r => r.json()).then(r => {
         document.getElementById("version").textContent = r.version;
         document.getElementById("curA").textContent = r.scalePointA;        
         document.getElementById("curB").textContent = r.scalePointB;        
@@ -147,7 +120,7 @@ function loadMeta() {
 
 function tare() {
     document.getElementById("tareOk").textContent = "Wait";
-    fetch("/api/action/tare")
+    fetch("/rest/tare")
     .then(r => {
         if (r.ok) return document.getElementById("tareOk").textContent = "Ok";
         throw new Error('Busy try later');
@@ -156,7 +129,7 @@ function tare() {
 }
 
 function calc(point) {
-    fetch("/api/scales")
+    fetch("/rest/measure")
     .then(r => {
         if (r.ok) return r.json();
         throw new Error('Busy try later');
@@ -170,7 +143,7 @@ function calc(point) {
 }
 
 function test(point) {
-    fetch("/api/scales")
+    fetch("/rest/measure")
     .then(r => {
         if (r.ok) return r.json();
         throw new Error('Busy try later');
@@ -199,13 +172,6 @@ Busy. Try later
 
 void cssPage(){
   server.send_P(200, PSTR("text/css"), CSS_page);
-}
-void scalesPage(){
-  if (state == STATE_READY) { 
-    server.send_P(200, PSTR("text/html"), SCALES_page);
-  } else {
-    busyPage();
-  }
 }
 void calibrationPage(){
   if (state == STATE_READY) { 

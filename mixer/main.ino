@@ -92,11 +92,12 @@ unsigned long lastSentTime = 0;
 void setState(State s);
 
 void setup() {
+  Wire.begin(D1, D2);
   lcd.init(); 
   lcd.backlight();
 
   lcd.setCursor(0, 0);
-  lcd.print(F("Start FW: "));
+  lcd.print(F("ver: "));
   lcd.print(FPSTR(FW_version));
 
   WiFi.mode(WIFI_STA);
@@ -142,7 +143,7 @@ void setup() {
 void loop() {
   readScales(16);
   printStatus(stateStr[state]); 
-  printProgressValueOnly(displayFilter.getEstimation());
+  printProgressValueOnly(rawToUnits(displayFilter.getEstimation()));
   server.handleClient();
   ArduinoOTA.handle();
   MDNS.update();
@@ -184,7 +185,7 @@ void sendScalesValue() {
 
 void sendState() {
   sendEvent(F("state"), 256, [] (String& message) {
-    appendJson(message, F("state"), stateStr[state],  false, true);  
+    appendJson(message, F("state"), stateStr[state],  true, true);  
   }); 
 }
 
@@ -588,9 +589,15 @@ void append(String& ret, const T& value) {
 }
 template <>
 void append<float>(String& ret, const float& value) {
-  ret += (long)value;
+  if (value < 0) ret += '-';
+  float v = fabs(value);
+  ret += (long)v;
   ret += '.';
-  int n = ((long)(value * 1000 + 0.5)) % 1000;
+  int n = ((long)(v * 1000 + 0.5)) % 1000;
+  if (n != 0) {
+    if (abs(n) < 100) ret += '0';
+    if (abs(n) < 10) ret += '0';
+  }
   while (n != 0 && n % 10 == 0) n = n / 10;
   ret += abs(n);  
 }
