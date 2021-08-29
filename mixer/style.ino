@@ -19,6 +19,7 @@ Status: <span id='state'></span><br>
     <p>P6 = <input type='text' name='p6'/> <span id='n6'></span><span id='r6'/></p>
     <p>P7 = <input type='text' name='p7'/> <span id='n7'></span><span id='r7'/></p>    
     <p>P8 = <input type='text' name='p8'/> <span id='n8'></span><span id='r8'/></p>
+    <input type='hidden' name='s'>
     <p id='actions'>
         <input type='submit' value='Start'/>
         <input type='button' onclick="tare();" value='Tare'/>
@@ -39,6 +40,7 @@ function loadMeta() {
                 goalIsSet = true;
             }
         }
+        document.getElementsByName('s')[0].value = params.get('s');
         const evtSource = new EventSource("/rest/events");
         evtSource.addEventListener("state",  event => onStateUpdate(JSON.parse(event.data)));
         evtSource.addEventListener("scales", event => onScalesUpdate(JSON.parse(event.data)));
@@ -52,7 +54,7 @@ function onStateUpdate(event) {
 }
 
 function onScalesUpdate(event) {
-    document.getElementById('weight').textContent = event.value;
+    document.getElementById('weight').textContent = event.value.toFixed(2);
 }
 
 function onReportUpdate(event) {

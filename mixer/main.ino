@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////
 // main code - don't change if you don't know what you are doing //
 ///////////////////////////////////////////////////////////////////
-const char FW_version[] PROGMEM = "2.1.0 igor";
+const char FW_version[] PROGMEM = "2.1.1 igor";
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -261,12 +261,13 @@ void handleStart() {
   eTime = 0;
   sumA = 0;
   sumB = 0;
+  int systemId = server.arg('s').toInt();
 
   for (byte i = 0; i < PUMPS_NO; i ++) {
     goal[i] = server.arg(String(F("p")) + (i + 1)).toFloat();
     curvol[i] = 0;
   }
-
+ 
   okPage();
 
   float offsetBeforePump = scale.get_offset();
@@ -289,7 +290,7 @@ void handleStart() {
   float raw3 = readScalesWithCheck(255); 
   sumB = (raw3 - raw2) / scale_calibration_B;
 
-  reportToWega();
+  reportToWega(systemId);
 
   scale.set_scale(scale_calibration_A);
   scale.set_offset(offsetBeforePump);
@@ -300,7 +301,7 @@ void handleStart() {
   lcd.clear();
 }
 
-void reportToWega() {
+void reportToWega(int systemId) {
   String httpstr((char*)0);
   httpstr.reserve(512);
   httpstr += F(WegaApiUrl);
@@ -314,7 +315,9 @@ void reportToWega() {
     httpstr += (i + 1);
     httpstr += '=';
     append(httpstr, goal[i]);
-  } 
+  }
+  httpstr += F("&s=");
+  httpstr += systemId; 
   WiFiClient client;
   HTTPClient http;
   http.begin(client, httpstr);
