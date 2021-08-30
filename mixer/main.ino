@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////
 // main code - don't change if you don't know what you are doing //
 ///////////////////////////////////////////////////////////////////
-const char FW_version[] PROGMEM = "2.1.1 igor";
+const char FW_version[] PROGMEM = "2.1.2 igor";
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -593,18 +593,15 @@ void append(String& ret, const T& value) {
 template <>
 void append<float>(String& ret, const float& value) {
   if (value < 0) ret += '-';
-  float v = fabs(value);
-  ret += (long)v;
+  ret += (long)fabs(value);
   ret += '.';
-  int n = ((long)(v * 1000 + 0.5)) % 1000;
-  if (n != 0) {
-    if (abs(n) < 100) ret += '0';
-    if (abs(n) < 10) ret += '0';
-  }
-  while (n != 0 && n % 10 == 0) n = n / 10;
-  ret += abs(n);  
+  int n = ((long)fabs(value * 1000 + 0.5)) % 1000;
+  if (n < 100) ret += '0';
+  if (n < 10) ret += '0';
+  ret += n;  
 }
 
+// server sent events
 bool checkConnected() {
   bool result = false;
   for (uint8_t i = 0; i < SSE_MAX_CHANNELS; i++) {

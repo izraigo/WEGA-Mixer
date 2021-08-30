@@ -26,7 +26,7 @@ Status: <span id='state'></span><br>
         <input type='button' onclick='location.href = "calibration";' value='Calibration'/>
     </p>
 </form>
-ver : <span id='version'></span>
+ver: <span id='version'></span>
 <script>
 function loadMeta() {
     fetch('/rest/meta').then(r => r.json()).then(r => {
