@@ -1,32 +1,43 @@
 const char CSS_page[] PROGMEM = R"=====(
 .button { width:105px; height:26px; font-size:0.8em; }
+form {
+    margin: 0 auto;
+    width: 500px;
+    padding: 1em;
+    position:absolute;
+    top: 0; 
+    left: 0;
+}
 )=====";
 
 const char MAIN_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <link rel='stylesheet' type='text/css' href='style.css'>
-Status: <span id='state'></span><br>
-<br><span id='weight'></span><br>
-<br>Sum A = <span id='sumA'></span>
-<br>Sum B = <span id='sumB'></span>
-<br>Timer = <span id='timer'></span>
 <form action="/rest/start">
-    <p>P1 = <input type='text' name='p1'/> <span id='n1'></span><span id='r1'/></p>
-    <p>P2 = <input type='text' name='p2'/> <span id='n2'></span><span id='r2'/></p>
-    <p>P3 = <input type='text' name='p3'/> <span id='n3'></span><span id='r3'/></p>    
-    <p>P4 = <input type='text' name='p4'/> <span id='n4'></span><span id='r4'/></p>
-    <p>P5 = <input type='text' name='p5'/> <span id='n5'></span><span id='r5'/></p>    
-    <p>P6 = <input type='text' name='p6'/> <span id='n6'></span><span id='r6'/></p>
-    <p>P7 = <input type='text' name='p7'/> <span id='n7'></span><span id='r7'/></p>    
-    <p>P8 = <input type='text' name='p8'/> <span id='n8'></span><span id='r8'/></p>
+    Status: <span id='state'>Wait</span><br>
+    <p style="text-align:left;">Scales = <span id='weight'></span> <span id='timer' style="float:right;"></span></p>
+    <fieldset>
+      <legend id='solutionA'>A</legend>
+        <p>P1 = <input type='text' name='p1'/> <span id='n1'></span><span id='r1'/></p>
+        <p>P2 = <input type='text' name='p2'/> <span id='n2'></span><span id='r2'/></p>
+        <p>P3 = <input type='text' name='p3'/> <span id='n3'></span><span id='r3'/></p>    
+    </fieldset>    
+    <fieldset>    
+      <legend id='solutionB'>B</legend>
+      <p>P4 = <input type='text' name='p4'/> <span id='n4'></span><span id='r4'/></p>
+      <p>P5 = <input type='text' name='p5'/> <span id='n5'></span><span id='r5'/></p>    
+      <p>P6 = <input type='text' name='p6'/> <span id='n6'></span><span id='r6'/></p>
+      <p>P7 = <input type='text' name='p7'/> <span id='n7'></span><span id='r7'/></p>    
+      <p>P8 = <input type='text' name='p8'/> <span id='n8'></span><span id='r8'/></p>
+    </fieldset>    
     <input type='hidden' name='s'>
     <p id='actions'>
         <input type='submit' value='Start'/>
         <input type='button' onclick="tare();" value='Tare'/>
         <input type='button' onclick='location.href = "calibration";' value='Calibration'/>
     </p>
-</form>
 ver: <span id='version'></span>
+</form>
 <script>
 function loadMeta() {
     fetch('/rest/meta').then(r => r.json()).then(r => {
@@ -58,10 +69,10 @@ function onScalesUpdate(event) {
 }
 
 function onReportUpdate(event) {
-    document.getElementById('weight').textContent = "";
-    document.getElementById('sumA').textContent = event.sumA.toFixed(2);
-    document.getElementById('sumB').textContent = event.sumB.toFixed(2);
-    document.getElementById('timer').textContent = new Date(event.timer * 1000).toISOString().substr(11, 8);
+    document.getElementById('weight').textContent = "...";
+    document.getElementById('solutionA').textContent = 'A (weight: ' + event.sumA.toFixed(2) + ')';
+    document.getElementById('solutionB').textContent = 'B (weight: ' + event.sumB.toFixed(2) + ')';
+    document.getElementById('timer').textContent = 'Timer = ' +  new Date(event.timer * 1000).toISOString().substr(11, 8);
     for (let i = 1; i <= event.goal.length; i++) {
         let goal = event.goal[i - 1];
         if (!goalIsSet) {
