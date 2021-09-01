@@ -592,13 +592,9 @@ void append(String& ret, const T& value) {
 }
 template <>
 void append<float>(String& ret, const float& value) {
-  if (value < 0) ret += '-';
-  ret += (long)fabs(value);
-  ret += '.';
-  int n = ((long)fabs(value * 1000 + 0.5)) % 1000;
-  if (n < 100) ret += '0';
-  if (n < 10) ret += '0';
-  ret += n;  
+  char buff[20];
+  dtostrf(value, 5, 3, buff);
+  ret += buff;
 }
 
 // server sent events
