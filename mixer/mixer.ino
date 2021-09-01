@@ -69,4 +69,4 @@ float scale_calibration_B = 2030;
 #define pump8n "8:B"
 #define pump8p 4000
 
-# define RUSTY_MOTOR_KICK false
+#define RUSTY_MOTOR_KICK false
