@@ -70,8 +70,10 @@ function onScalesUpdate(event) {
 
 function onReportUpdate(event) {
     document.getElementById('weight').textContent = "...";
-    document.getElementById('solutionA').textContent = 'A (weight: ' + event.sumA.toFixed(2) + ')';
-    document.getElementById('solutionB').textContent = 'B (weight: ' + event.sumB.toFixed(2) + ')';
+    let goalA = event.goal[0] + event.goal[1] + event.goal[2];
+    let goalB = event.goal[3] + event.goal[4] + event.goal[5] + event.goal[6] + event.goal[7];
+    document.getElementById('solutionA').textContent = `A (weight: ${event.sumA.toFixed(2)} should be ${goalA.toFixed(2)})`;
+    document.getElementById('solutionB').textContent = `B (weight: ${event.sumB.toFixed(2)} should be ${goalB.toFixed(2)})`;
     document.getElementById('timer').textContent = 'Timer = ' +  new Date(event.timer * 1000).toISOString().substr(11, 8);
     for (let i = 1; i <= event.goal.length; i++) {
         let goal = event.goal[i - 1];

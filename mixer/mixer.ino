@@ -10,13 +10,12 @@
 // git update-index --no-assume-unchanged mixer/mixer.ino   //
 //////////////////////////////////////////////////////////////
 
-// WiFi network configuration
-const char* ssid = "YOUR_WIFI_NETWORK_NAME";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "TP-Link_BBDB";
+const char* password = "15570161";
 
 // scale_calibration, side A and B
-float scale_calibration_A = 2030;
-float scale_calibration_B = 2030;
+float scale_calibration_A = 1998.1671;
+float scale_calibration_B =  1999.7903;// 1999.8881; 
 
 // Setting WEGA-API
 #define WegaApiUrl "http://192.168.237.107/remote/mixerdb.php"
