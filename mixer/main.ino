@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////
 // main code - don't change if you don't know what you are doing //
 ///////////////////////////////////////////////////////////////////
-const char FW_version[] PROGMEM = "2.1.4 igor";
+const char FW_version[] PROGMEM = "2.1.5 igor";
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -9,7 +9,6 @@ const char FW_version[] PROGMEM = "2.1.4 igor";
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-#include <WiFiClient.h>
 #include <ESP8266HTTPClient.h>
 #include <Wire.h>
 #include "src/LiquidCrystal_I2C/LiquidCrystal_I2C.h"
@@ -179,7 +178,9 @@ void handleSubscribe() {
 
 void sendScalesValue() {
   sendEvent(F("scales"), 256, [] (String& message) {
-    appendJson(message, F("value"), rawToUnits(displayFilter.getEstimation()),  false, true);  
+    appendJson(message, F("value"),    rawToUnits(displayFilter.getEstimation()), false, false);  
+    appendJson(message, F("rawValue"), displayFilter.getEstimation(),             false, false);
+    appendJson(message, F("rawZero"),  scale.get_offset(),                        false, true);
   }); 
 }
 
