@@ -262,7 +262,7 @@ void handleStart() {
   eTime = 0;
   sumA = 0;
   sumB = 0;
-  int systemId = server.arg('s').toInt();
+  int systemId = server.arg("s").toInt();
 
   for (byte i = 0; i < PUMPS_NO; i ++) {
     goal[i] = server.arg(String(F("p")) + (i + 1)).toFloat();
@@ -306,7 +306,8 @@ void reportToWega(int systemId) {
   String httpstr((char*)0);
   httpstr.reserve(512);
   httpstr += F(WegaApiUrl);
-  httpstr += '?';
+  httpstr += F("?s=");
+  httpstr += systemId; 
   for(byte i = 0; i < PUMPS_NO; i++) {
     httpstr += F("&p");
     httpstr += (i + 1);
@@ -317,8 +318,6 @@ void reportToWega(int systemId) {
     httpstr += '=';
     append(httpstr, goal[i]);
   }
-  httpstr += F("&s=");
-  httpstr += systemId; 
   WiFiClient client;
   HTTPClient http;
   http.begin(client, httpstr);
